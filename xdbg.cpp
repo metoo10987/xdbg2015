@@ -2,8 +2,10 @@
 //
 #include <tchar.h>
 #include <Windows.h>
+#include <WinNT.h>
 #include <assert.h>
 #include "XDbgController.h"
+#include <stdio.h>
 
 int _tmain(int argc, _TCHAR* argv[])
 {
@@ -16,7 +18,10 @@ int _tmain(int argc, _TCHAR* argv[])
 				xdbg.continueEvent(dbgEvent.dwProcessId, dbgEvent.dwThreadId, DBG_CONTINUE);
 			else
 				xdbg.continueEvent(dbgEvent.dwProcessId, dbgEvent.dwThreadId, DBG_EXCEPTION_NOT_HANDLED);
+		} else if (dbgEvent.dwDebugEventCode == OUTPUT_DEBUG_STRING_EVENT) {
+			printf("DBG: %p\n", dbgEvent.u.DebugString.lpDebugStringData);
 		} else {
+			printf("dbgEvent.dwDebugEventCode£º %u\n", dbgEvent.dwDebugEventCode);
 			assert(false);
 			return -1;
 		}

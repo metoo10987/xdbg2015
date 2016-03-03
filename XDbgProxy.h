@@ -15,7 +15,9 @@ public:
 
 	BOOL DllMain(HANDLE hModule, DWORD ul_reason_for_call, LPVOID lpReserved);
 
-	// TODO: Add loadddll, unloaddll, outputdubgstr event
+	// TODO: Implement LOAD_DLL_DEBUG_EVENT, UNLOAD_DLL_DEBUG_EVENT By:
+	//	HOOK NtMapViewOfSection & NtUnmapViewOfSection, CHECK DLL LIST WHEN THE SYSCALL RETURNED	
+	// Ignore CREATE_PROCESS_DEBUG_EVENT & EXIT_PROCESS_DEBUG_EVENT & RIP_EVENT
 
 protected:
 	static LONG CALLBACK _VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo);
@@ -24,5 +26,5 @@ protected:
 
 protected:
 	HANDLE				_hPipe;
-	PEXCEPTION_RECORD	_lastException;
+	EXCEPTION_RECORD	_lastException;
 };

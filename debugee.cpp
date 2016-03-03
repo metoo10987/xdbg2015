@@ -9,11 +9,16 @@ int _tmain(int argc, _TCHAR* argv[])
 	if (!XDbgProxy::instance().initialize()) {
 		return -1;
 	}
-
-	Sleep(10000);
-	int* p = NULL;
-	*p = 10;
 	
+	Sleep(10000);
+	// OutputDebugString("test");
+	__try {
+		//int* p = NULL;
+		//*p = 10;
+		OutputDebugString("test\n");
+	} __except(EXCEPTION_EXECUTE_HANDLER) {
+
+	}
 
 	return 0;
 }
