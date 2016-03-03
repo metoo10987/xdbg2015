@@ -93,7 +93,7 @@ PVOID WINAPI GetThreadStartAddress(HANDLE hThread)
     HANDLE hDupHandle;
     PVOID dwStartAddress;
 
-	typedef NTSTATUS (NTAPI* pNtQIT)(HANDLE ThreadHandle, DWORD ThreadInformationClass, PVOID ThreadInformation, 
+	typedef NTSTATUS (NTAPI* pNtQIT)(HANDLE ThreadHandle, LONG ThreadInformationClass, PVOID ThreadInformation, 
 		ULONG ThreadInformationLength, PULONG ReturnLength OPTIONAL);
 
 	static pNtQIT NtQueryInformationThread = NULL;
