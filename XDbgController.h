@@ -10,4 +10,5 @@ public:
 	bool continueEvent(DWORD dwProcessId, DWORD dwThreadId, DWORD dwContinueStatus);
 protected:
 	HANDLE		_hPipe;
+	HANDLE		_hProcess;
 };

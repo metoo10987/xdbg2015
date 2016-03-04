@@ -48,11 +48,13 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;XDBGCORE_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>DETOURS_X86;DETOURS_32BIT;WIN32;_DEBUG;_WINDOWS;_USRDLL;XDBGCORE_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile>xdbgcore.def</ModuleDefinitionFile>
+      <AdditionalDependencies>Psapi.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -62,7 +64,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;XDBGCORE_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>DETOURS_X86;DETOURS_32BIT;WIN32;NDEBUG;_WINDOWS;_USRDLL;XDBGCORE_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -73,8 +75,17 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <None Include="ReadMe.txt" />
+    <None Include="xdbgcore.def" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="common.cpp" />
+    <ClCompile Include="creatwth.cpp" />
+    <ClCompile Include="detours.cpp" />
+    <ClCompile Include="disasm.cpp" />
+    <ClCompile Include="image.cpp" />
+    <ClCompile Include="Lock.cpp" />
+    <ClCompile Include="modules.cpp" />
+    <ClCompile Include="Thread.cpp" />
     <ClCompile Include="XDbgController.cpp" />
     <ClCompile Include="xdbgcore.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
@@ -82,6 +93,11 @@
     <ClCompile Include="XDbgProxy.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="common.h" />
+    <ClInclude Include="detours.h" />
+    <ClInclude Include="detver.h" />
+    <ClInclude Include="Lock.h" />
+    <ClInclude Include="Thread.h" />
     <ClInclude Include="XDbgController.h" />
     <ClInclude Include="XDbgProxy.h" />
   </ItemGroup>
