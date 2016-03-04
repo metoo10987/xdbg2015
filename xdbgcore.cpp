@@ -88,6 +88,10 @@ BOOL (__stdcall * Real_WaitForDebugEvent)(LPDEBUG_EVENT a0,
                                           DWORD a1)
     = WaitForDebugEvent;
 
+BOOL(__stdcall * Real_ContinueDebugEvent)(DWORD a0,
+	DWORD a1,
+	DWORD a2)
+	= ContinueDebugEvent;
 ////////////////////////////////////////////////////////////////////////////////
 
 BOOL __stdcall Mine_CreateProcessA(LPCSTR a0,
@@ -181,6 +185,18 @@ BOOL __stdcall Mine_WaitForDebugEvent(LPDEBUG_EVENT a0,
 		return Real_WaitForDebugEvent(a0, a1);
 }
 
+BOOL __stdcall Mine_ContinueDebugEvent(DWORD a0,
+	DWORD a1,
+	DWORD a2)
+{
+	MyTrace("%s()", __FUNCTION__);
+	if (dbgctl != NULL) {
+		return dbgctl->continueEvent(a0, a1, a2) ? TRUE : FALSE;
+	}
+	else
+		return Real_ContinueDebugEvent(a0, a1, a2);
+}
+
 BOOL initializeDebugger()
 {
 	MyTrace("%s()", __FUNCTION__);
@@ -194,6 +210,7 @@ BOOL initializeDebugger()
 	DetourAttach(&(PVOID&)Real_CreateProcessW, &(PVOID&)Mine_CreateProcessW);
 	DetourAttach(&(PVOID&)Real_DebugActiveProcess, &(PVOID&)Mine_DebugActiveProcess);
 	DetourAttach(&(PVOID&)Real_WaitForDebugEvent, &(PVOID&)Mine_WaitForDebugEvent);
+	DetourAttach(&(PVOID&)Real_ContinueDebugEvent, &(PVOID&)Mine_ContinueDebugEvent);
 	return DetourTransactionCommit() == NO_ERROR;
 }
 

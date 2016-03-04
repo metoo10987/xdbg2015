@@ -352,8 +352,10 @@ long XDbgProxy::run()
 
 				_events.pop_front();
 
-				if (msg.dwDebugEventCode == CREATE_PROCESS_DEBUG_EVENT)
+				if (msg.dwDebugEventCode == CREATE_PROCESS_DEBUG_EVENT) {
 					_initOK = true;
+					DebugBreak();
+				}
 			}
 		}
 

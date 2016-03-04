@@ -62,7 +62,7 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 
 bool XDbgController::continueEvent(DWORD dwProcessId, DWORD dwThreadId, DWORD dwContinueStatus)
 {
-	MyTrace("%s(): CONTINUE_EVENT: %u", __FUNCTION__, dwContinueStatus);
+	MyTrace("%s(): CONTINUE_EVENT: %x", __FUNCTION__, dwContinueStatus);
 	CONTINUE_DEBUG_EVENT ack;
 	ack.dwProcessId = dwProcessId;
 	ack.dwThreadId = dwThreadId;
