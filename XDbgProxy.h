@@ -55,6 +55,7 @@ protected:
 	bool delThread(DWORD tid);
 	void suspendThreads(DWORD tid);
 	void resumeThread(DWORD tid);
+	HANDLE getThreadHandle(DWORD tid);
 
 protected:
 	HANDLE					_hPipe;

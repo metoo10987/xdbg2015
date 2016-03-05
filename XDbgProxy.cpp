@@ -47,10 +47,14 @@ BOOL XDbgProxy::recvDbgAck(struct CONTINUE_DEBUG_EVENT& ack)
 
 BOOL XDbgProxy::sendDbgEvent(const DEBUG_EVENT& event, struct CONTINUE_DEBUG_EVENT& ack)
 {
-	if (!sendDbgEvent(event))
-		return FALSE;
-
-	return recvDbgAck(ack);
+	BOOL result;
+	suspendThreads(GetCurrentThreadId());
+	if (sendDbgEvent(event))
+		result = recvDbgAck(ack);
+	else
+		result = FALSE;
+	resumeThread(GetCurrentThreadId());
+	return result;
 }
 
 void XDbgProxy::postDbgEvent(const DEBUG_EVENT& event)
@@ -75,7 +79,7 @@ void XDbgProxy::suspendThreads(DWORD tid)
 {
 	std::map<DWORD, HANDLE>::iterator it;
 	for (it = _threads.begin(); it != _threads.end(); it++) {
-		if (it->first == tid)
+		if (it->first == tid || it->first == getId())
 			continue;
 		SuspendThread(it->second);
 	}
@@ -85,10 +89,19 @@ void XDbgProxy::resumeThread(DWORD tid)
 {
 	std::map<DWORD, HANDLE>::iterator it;
 	for (it = _threads.begin(); it != _threads.end(); it++) {
-		if (it->first == tid)
+		if (it->first == tid || it->first == getId())
 			continue;
 		ResumeThread(it->second);
 	}
+}
+
+HANDLE XDbgProxy::getThreadHandle(DWORD tid)
+{
+	std::map<DWORD, HANDLE>::iterator it;
+	it = _threads.find(tid);
+	if (it == _threads.end())
+		return NULL;
+	return it->second;
 }
 
 LONG CALLBACK XDbgProxy::_VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
@@ -206,7 +219,7 @@ LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 		msg.u.DebugString.nDebugStringLength = (WORD )ExceptionInfo->ExceptionRecord->ExceptionInformation[0];
 		msg.u.DebugString.lpDebugStringData = (LPSTR )ExceptionInfo->ExceptionRecord->ExceptionInformation[1];
 	} else {
-
+		
 		msg.dwDebugEventCode = EXCEPTION_DEBUG_EVENT;
 		if (_lastException.ExceptionCode == ExceptionInfo->ExceptionRecord->ExceptionCode && 
 			_lastException.ExceptionAddress == ExceptionInfo->ExceptionRecord->ExceptionAddress) {
@@ -223,6 +236,20 @@ LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 	if (!sendDbgEvent(msg, ack)) {
 		// log error
 		return EXCEPTION_CONTINUE_SEARCH;
+	}
+
+	if (ExceptionInfo->ExceptionRecord->ExceptionCode == STATUS_BREAKPOINT) {
+
+		// FIXME: 可能需要 HOOK SetThreadContext() / GetThreadContext()
+		// TitanEngine 中是怎么处理自动跳到下一个指令的，有待研究
+		// 注:	异常处理函数返回时， 会根据 ExceptionInfo->ContextRecord 调用 SetThreadContext
+		//		这可能是调试器设置的单步标志无效的原因
+		if (ack.dwContinueStatus == DBG_CONTINUE && msg.u.Exception.dwFirstChance == 0)
+#ifdef _M_X64
+			ExceptionInfo->ContextRecord->Rip += 1;
+#else
+			ExceptionInfo->ContextRecord->Eip += 1;
+#endif
 	}
 	
 	if (ack.dwContinueStatus == DBG_CONTINUE)
