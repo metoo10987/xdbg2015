@@ -35,7 +35,16 @@ int _tmain(int argc, _TCHAR* argv[])
 	attachProcessByName("debugee.exe");
 	DEBUG_EVENT dbgEvent;
 	while (xdbg.waitEvent(&dbgEvent)) {
+		printf("dbgEvent.dwDebugEventCode£º %u\n", dbgEvent.dwDebugEventCode);
 		if (dbgEvent.dwDebugEventCode == EXCEPTION_DEBUG_EVENT) {
+
+			printf("DBG: Exception: %x, Addr: %p, FirstChance: %d\n", dbgEvent.u.Exception.ExceptionRecord.ExceptionCode,
+				dbgEvent.u.Exception.ExceptionRecord.ExceptionAddress, dbgEvent.u.Exception.dwFirstChance);
+
+			/* if (dbgEvent.u.Exception.ExceptionRecord.ExceptionCode == STATUS_BREAKPOINT) {
+
+			} */
+
 			if (dbgEvent.u.Exception.dwFirstChance)
 				xdbg.continueEvent(dbgEvent.dwProcessId, dbgEvent.dwThreadId, DBG_CONTINUE);
 			else
@@ -47,12 +56,12 @@ int _tmain(int argc, _TCHAR* argv[])
 		} else if (dbgEvent.dwDebugEventCode == UNLOAD_DLL_DEBUG_EVENT) {
 			printf("DBG: UnloadDll: %p\n", dbgEvent.u.UnloadDll.lpBaseOfDll);
 		} else {
-			printf("dbgEvent.dwDebugEventCode£º %u\n", dbgEvent.dwDebugEventCode);
+			// printf("dbgEvent.dwDebugEventCode£º %u\n", dbgEvent.dwDebugEventCode);
 			// assert(false);
 			// return -1;
 		}
 
-		xdbg.continueEvent(dbgEvent.dwProcessId, dbgEvent.dwThreadId, dbgEvent.dwDebugEventCode);
+		xdbg.continueEvent(dbgEvent.dwProcessId, dbgEvent.dwThreadId, DBG_CONTINUE);
 	}
 	return 0;
 }

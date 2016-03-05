@@ -157,7 +157,7 @@ bool XDbgProxy::initialize()
 
 LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 {
-	// MyTrace("%s, code: %x\n", __FUNCTION__, ExceptionInfo->ExceptionRecord->ExceptionCode);
+	printf("%s, code: %x\n", __FUNCTION__, ExceptionInfo->ExceptionRecord->ExceptionCode);
 	if (!_attached)
 		return EXCEPTION_CONTINUE_SEARCH;
 
@@ -341,7 +341,7 @@ BOOL XDbgProxy::DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 	switch (reason) {
 	case DLL_PROCESS_ATTACH:
 		_mainThreadId = GetProcessMainThread(GetCurrentProcessId());
-		_mainThreadTeb = NtCurrentTeb();
+		_mainThreadTeb = GetThreadTeb(_mainThreadId);
 		MyTrace("%s(): process(%u) xdbg proxy loaded. thread id: %u", __FUNCTION__, GetCurrentProcessId(), _mainThreadId);
 		break;
 
