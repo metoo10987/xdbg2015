@@ -37,13 +37,25 @@ protected:
 
 	virtual long run();
 
-	void postMsg(DEBUG_EVENT& event);
+	BOOL sendDbgEvent(const DEBUG_EVENT& event);
+	BOOL recvDbgAck(struct CONTINUE_DEBUG_EVENT& ack);
+	BOOL sendDbgEvent(const DEBUG_EVENT& event, struct CONTINUE_DEBUG_EVENT& ack);
 
+	void postDbgEvent(const DEBUG_EVENT& event);
+
+	void onDbgConnect();
+	void onDbgDisconnect();
+
+	void sendProcessInfo();
+	void sendModuleInfo();
+	void sendThreadInfo();
 protected:
-	HANDLE				_hPipe;
-	bool				_initOK;
-	EXCEPTION_RECORD	_lastException;
-	int					_stopFlag;
+	HANDLE					_hPipe;
+	bool					_attached;
+	EXCEPTION_RECORD		_lastException;
+	volatile int			_stopFlag;
 	std::list<DEBUG_EVENT>	_events;
-	Mutex				_mutex;
+	Mutex					_mutex;
+	DWORD					_mainThreadId;
+	_TEB*					_mainThreadTeb;
 };

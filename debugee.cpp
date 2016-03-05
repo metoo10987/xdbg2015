@@ -6,11 +6,19 @@
 
 int _tmain(int argc, _TCHAR* argv[])
 {
+	XDbgProxy::instance().DllMain(GetModuleHandle(NULL), DLL_PROCESS_ATTACH, NULL);
+
 	if (!XDbgProxy::instance().initialize()) {
 		return -1;
 	}
 	
 	Sleep(10000);
+	//__try {
+		DebugBreak();
+		Sleep(10000);
+	//} __except (EXCEPTION_EXECUTE_HANDLER) {
+		printf("aaaa\n");
+	//}
 	// OutputDebugString("test");
 	__try {
 		//int* p = NULL;
