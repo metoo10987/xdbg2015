@@ -4,6 +4,7 @@
 #include "Lock.h"
 
 #include <list>
+#include <map>
 
 class XDbgProxy : public Thread
 {
@@ -50,6 +51,12 @@ protected:
 	void sendModuleInfo();
 	void sendThreadInfo();
 protected:
+	bool addThread(DWORD tid);
+	bool delThread(DWORD tid);
+	void suspendThreads(DWORD tid);
+	void resumeThread(DWORD tid);
+
+protected:
 	HANDLE					_hPipe;
 	bool					_attached;
 	EXCEPTION_RECORD		_lastException;
@@ -58,4 +65,5 @@ protected:
 	Mutex					_mutex;
 	DWORD					_mainThreadId;
 	_TEB*					_mainThreadTeb;
+	std::map<DWORD, HANDLE>	_threads;
 };

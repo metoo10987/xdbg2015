@@ -59,6 +59,38 @@ void XDbgProxy::postDbgEvent(const DEBUG_EVENT& event)
 	_events.push_back(event);
 }
 
+bool XDbgProxy::addThread(DWORD tid)
+{
+	_threads[tid] = OpenThread(THREAD_ALL_ACCESS, FALSE, tid);
+	return true;
+}
+
+bool XDbgProxy::delThread(DWORD tid)
+{
+	_threads.erase(tid);
+	return true;
+}
+
+void XDbgProxy::suspendThreads(DWORD tid)
+{
+	std::map<DWORD, HANDLE>::iterator it;
+	for (it = _threads.begin(); it != _threads.end(); it++) {
+		if (it->first == tid)
+			continue;
+		SuspendThread(it->second);
+	}
+}
+
+void XDbgProxy::resumeThread(DWORD tid)
+{
+	std::map<DWORD, HANDLE>::iterator it;
+	for (it = _threads.begin(); it != _threads.end(); it++) {
+		if (it->first == tid)
+			continue;
+		ResumeThread(it->second);
+	}
+}
+
 LONG CALLBACK XDbgProxy::_VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 {
 	return XDbgProxy::instance().VectoredHandler(ExceptionInfo);
@@ -356,13 +388,15 @@ BOOL XDbgProxy::DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 		msg.dwProcessId = GetCurrentProcessId();
 		msg.dwThreadId = GetCurrentThreadId();
 		msg.dwDebugEventCode = CREATE_THREAD_DEBUG_EVENT;
-		msg.u.CreateThread.hThread = (HANDLE )GetCurrentThreadId();
+		msg.u.CreateThread.hThread = NULL;
 		msg.u.CreateThread.lpStartAddress = (LPTHREAD_START_ROUTINE )GetThreadStartAddress(GetCurrentThread());
 		msg.u.CreateThread.lpThreadLocalBase = NtCurrentTeb();
 
 		if (!sendDbgEvent(msg, ack)) {
 
 		}
+
+		addThread(GetCurrentThreadId());
 
 		break;
 
@@ -380,6 +414,7 @@ BOOL XDbgProxy::DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 			
 		}
 
+		delThread(GetCurrentThreadId());
 		break;
 	};
 
@@ -550,6 +585,7 @@ void XDbgProxy::sendThreadInfo()
 					msg.u.CreateThread.hThread = NULL;
 					msg.u.CreateThread.lpStartAddress = (LPTHREAD_START_ROUTINE)GetThreadStartAddress(GetCurrentThread());
 					msg.u.CreateThread.lpThreadLocalBase = GetThreadTeb(te.th32ThreadID);
+					addThread(te.th32ThreadID);
 					sendDbgEvent(msg, ack);
 				}
 
