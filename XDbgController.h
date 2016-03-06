@@ -15,6 +15,8 @@ public:
 	}
 
 protected:
+
+protected:
 	HANDLE		_hPipe;
 	HANDLE		_hProcess;
 };

@@ -29,3 +29,11 @@ struct CONTINUE_DEBUG_EVENT {
 };
 
 void MyTrace(LPCSTR fmt, ...);
+
+#ifdef _DEBUG
+#define MYTRACE		MyTrace
+#else
+#define MYTRACE		
+#endif
+
+#define SINGLE_STEP_FLAG	0x100

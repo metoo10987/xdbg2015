@@ -38,13 +38,10 @@ BOOL APIENTRY DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 			}
 
 		} else if (mode == 1) {
-			if (debug_if == 0) { // usermode debug enginue
-
-				MyTrace("xdbgcore initializing. mode: 1");
-				if (!initializeDebugger()) {
-					// log error
-					assert(false);
-				}
+			MyTrace("xdbgcore initializing. mode: 1");
+			if (!initializeDebugger()) {
+				// log error
+				assert(false);
 			}
 		}
 	}
@@ -107,11 +104,14 @@ BOOL __stdcall Mine_CreateProcessA(LPCSTR a0,
 {
 	MyTrace("%s", __FUNCTION__);
 	DWORD flags = dwCreationFlags;
-	if (DEBUG_PROCESS & dwCreationFlags) {
-		dwCreationFlags &= ~DEBUG_PROCESS;
+	if (dbgctl) {
+		if (DEBUG_PROCESS & dwCreationFlags) {
+			dwCreationFlags &= ~DEBUG_PROCESS;
+		}
+
+		dwCreationFlags |= CREATE_SUSPENDED;
 	}
 
-	dwCreationFlags |= CREATE_SUSPENDED;
 	if (!Real_CreateProcessA(a0, a1, a2, a3, a4, dwCreationFlags, a6, a7, a8, a9)){
 		return FALSE;
 	}
@@ -119,11 +119,12 @@ BOOL __stdcall Mine_CreateProcessA(LPCSTR a0,
 	if (dbgctl) {
 		if (injectDll(a9->dwProcessId))
 			dbgctl->attach(a9->dwProcessId);
+
+		if ((dwCreationFlags & CREATE_SUSPENDED) == 0) {
+			ResumeThread(a9->hThread);
+		}
 	}
 
-	if ((dwCreationFlags & CREATE_SUSPENDED) == 0) {
-		ResumeThread(a9->hThread);
-	}
 
 	return TRUE;
 }
@@ -139,13 +140,16 @@ BOOL __stdcall Mine_CreateProcessW(LPCWSTR a0,
                                    LPSTARTUPINFOW a8,
                                    LPPROCESS_INFORMATION a9)
 {
-	MyTrace("%s", __FUNCTION__);
+	MyTrace("%s()", __FUNCTION__);
 	DWORD flags = dwCreationFlags;
-	if (DEBUG_PROCESS & dwCreationFlags) {
-		dwCreationFlags &= ~DEBUG_PROCESS;
+	if (dbgctl) {
+		if (DEBUG_PROCESS & dwCreationFlags) {
+			dwCreationFlags &= ~DEBUG_PROCESS;
+		}
+
+		dwCreationFlags |= CREATE_SUSPENDED;
 	}
 
-	dwCreationFlags |= CREATE_SUSPENDED;
 	if (!Real_CreateProcessW(a0, a1, a2, a3, a4, dwCreationFlags, a6, a7, a8, a9)){
 		return FALSE;
 	}
@@ -153,11 +157,12 @@ BOOL __stdcall Mine_CreateProcessW(LPCWSTR a0,
 	if (dbgctl) {
 		if (injectDll(a9->dwProcessId))
 			dbgctl->attach(a9->dwProcessId);
+
+		if ((dwCreationFlags & CREATE_SUSPENDED) == 0) {
+			ResumeThread(a9->hThread);
+		}
 	}
 
-	if ((dwCreationFlags & CREATE_SUSPENDED) == 0) {
-		ResumeThread(a9->hThread);
-	}
 
 	return TRUE;
 }
@@ -175,21 +180,92 @@ BOOL __stdcall Mine_DebugActiveProcess(DWORD a0)
 	}
 }
 
+#ifdef _DEBUG
+
+DWORD eventSerial = 0;
+
+void dumpDebugEvent(LPDEBUG_EVENT lpDebugEvent)
+{
+	switch (lpDebugEvent->dwDebugEventCode) {
+	case CREATE_PROCESS_DEBUG_EVENT:
+		MyTrace("DUMP[%d]: CREATE_PROCESS_DEBUG_EVENT [%d][start at %p]", lpDebugEvent->dwThreadId, 
+			++ eventSerial,	lpDebugEvent->u.CreateProcessInfo.lpStartAddress);
+		break;
+
+	case EXIT_PROCESS_DEBUG_EVENT:
+		MyTrace("DUMP[%d]: EXIT_PROCESS_DEBUG_EVENT [%d][exit code %d]", lpDebugEvent->dwThreadId, 
+			++ eventSerial, lpDebugEvent->u.ExitProcess.dwExitCode);
+		break;
+
+	case CREATE_THREAD_DEBUG_EVENT:
+		MyTrace("DUMP[%d]: CREATE_THREAD_DEBUG_EVENT [%d][start at %p]", lpDebugEvent->dwThreadId, 
+			++ eventSerial, lpDebugEvent->u.CreateThread.lpStartAddress);
+		break;
+
+	case EXIT_THREAD_DEBUG_EVENT:
+		MyTrace("DUMP[%d]: EXIT_THREAD_DEBUG_EVENT [%d][exit code %d]", lpDebugEvent->dwThreadId, 
+			++ eventSerial, lpDebugEvent->u.ExitThread.dwExitCode);
+		break;
+
+	case LOAD_DLL_DEBUG_EVENT:
+		MyTrace("DUMP[%d]: LOAD_DLL_DEBUG_EVENT [%d][base %p]", lpDebugEvent->dwThreadId, 
+			++ eventSerial, lpDebugEvent->u.LoadDll.lpBaseOfDll);
+		break;
+
+	case UNLOAD_DLL_DEBUG_EVENT:
+		MyTrace("DUMP[%d]: UNLOAD_DLL_DEBUG_EVENT [%d][base %p]", lpDebugEvent->dwThreadId, 
+			++ eventSerial,	lpDebugEvent->u.UnloadDll.lpBaseOfDll);
+		break;
+
+	case EXCEPTION_DEBUG_EVENT:
+		MyTrace("DUMP[%d]: EXCEPTION_DEBUG_EVENT [%d][code %x, address %p, firstChance: %d]", 
+			lpDebugEvent->dwThreadId, ++ eventSerial, 
+			lpDebugEvent->u.Exception.ExceptionRecord.ExceptionCode,
+			lpDebugEvent->u.Exception.ExceptionRecord.ExceptionAddress, 
+			lpDebugEvent->u.Exception.dwFirstChance);
+		break;
+
+	case OUTPUT_DEBUG_STRING_EVENT:
+		MyTrace("DUMP[%d]: OUTPUT_DEBUG_STRING_EVENT [%d][base %p]", lpDebugEvent->dwThreadId, 
+			++ eventSerial, lpDebugEvent->u.DebugString.lpDebugStringData);
+		break;
+
+	case RIP_EVENT:
+		MyTrace("DUMP[%d]: RIP_EVENT [%d][err %x]", lpDebugEvent->dwThreadId, ++ eventSerial, 
+			lpDebugEvent->u.RipInfo.dwError);
+		break;
+
+	default:
+		MyTrace("DUMP[%d]: UNKNOWN EVENT [%d][eventId %x]", lpDebugEvent->dwThreadId, ++ eventSerial, 
+			lpDebugEvent->dwDebugEventCode);
+		break;
+	}
+}
+
+#endif
+
 BOOL __stdcall Mine_WaitForDebugEvent(LPDEBUG_EVENT a0,
                                       DWORD a1)
 {
-	MyTrace("%s()", __FUNCTION__);
+	BOOL result;
+	MyTrace("%s(%p, %u)", __FUNCTION__, a0, a1);
 	if (dbgctl != NULL) {
-		return dbgctl->waitEvent(a0, a1) ? TRUE: FALSE;
+		result = dbgctl->waitEvent(a0, a1) ? TRUE : FALSE;
 	} else
-		return Real_WaitForDebugEvent(a0, a1);
+		result = Real_WaitForDebugEvent(a0, a1);
+
+#ifdef _DEBUG
+	if (result)
+		dumpDebugEvent(a0);
+#endif
+	return result;
 }
 
 BOOL __stdcall Mine_ContinueDebugEvent(DWORD a0,
 	DWORD a1,
 	DWORD a2)
 {
-	MyTrace("%s()", __FUNCTION__);
+	MyTrace("%s(%u, %u, %x)", __FUNCTION__, a0, a1, a2);
 	if (dbgctl != NULL) {
 		return dbgctl->continueEvent(a0, a1, a2) ? TRUE : FALSE;
 	}
@@ -200,9 +276,12 @@ BOOL __stdcall Mine_ContinueDebugEvent(DWORD a0,
 BOOL initializeDebugger()
 {
 	MyTrace("%s()", __FUNCTION__);
-	dbgctl = new XDbgController();
-	if (dbgctl == NULL)
-		return FALSE;
+
+	if (debug_if == 0) {
+		dbgctl = new XDbgController();
+		if (dbgctl == NULL)
+			return FALSE;
+	}
 
     DetourTransactionBegin();
     DetourUpdateThread(GetCurrentThread());

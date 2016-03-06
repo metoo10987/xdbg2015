@@ -62,13 +62,13 @@ DWORD __stdcall Thread::threadProc(void* param)
 	Thread* thisPtr = (Thread* )param;
 	DWORD result;
 
-	__try {
+	// __try {
 
 		result = (DWORD )thisPtr->run();
 
-	} __except(exceptionFilter(GetExceptionInformation())) {
+	// } __except(exceptionFilter(GetExceptionInformation())) {
 
-	}
+	// }
 
 	thisPtr->final(result);
 	return result;

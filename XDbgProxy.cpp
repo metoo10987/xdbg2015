@@ -23,8 +23,15 @@ XDbgProxy::~XDbgProxy(void)
 		CloseHandle(_hPipe);
 }
 
+#define LAST_EVENT		RIP_EVENT
+
 BOOL XDbgProxy::sendDbgEvent(const DEBUG_EVENT& event)
 {
+	if (event.dwDebugEventCode > LAST_EVENT) {
+		assert(false);
+		return FALSE;
+	}
+
 	DWORD len;
 	if (!WriteFile(_hPipe, &event, sizeof(event), &len, NULL)) {
 		// log error
@@ -163,7 +170,8 @@ VOID CALLBACK XDbgProxy::LdrDllNotification(ULONG NotificationReason, PCLDR_DLL_
 	} else if (NotificationReason == LDR_DLL_NOTIFICATION_REASON_LOADED) {
 		msg.dwDebugEventCode = UNLOAD_DLL_DEBUG_EVENT;
 		msg.u.UnloadDll.lpBaseOfDll = NotificationData->Unloaded.DllBase;
-	}
+	} /* else
+		return; */
 	
 	CONTINUE_DEBUG_EVENT ack;
 	if (!sendDbgEvent(msg, ack)) {
@@ -200,6 +208,18 @@ bool XDbgProxy::initialize()
 	return true;
 }
 
+static inline void copyDbgRegs(CONTEXT* dest, const CONTEXT* src)
+{
+	dest->Dr0 = src->Dr0;
+	dest->Dr1 = src->Dr1;
+	dest->Dr2 = src->Dr2;
+	dest->Dr3 = src->Dr3;
+	dest->Dr6 = src->Dr6;
+	dest->Dr7 = src->Dr7;
+}
+
+#define DBG_PRINTEXCEPTION_WIDE_C		(0x4001000AL)
+
 LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 {
 	printf("%s, code: %x\n", __FUNCTION__, ExceptionInfo->ExceptionRecord->ExceptionCode);
@@ -209,15 +229,25 @@ LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 	if (GetCurrentThreadId() == getId())
 		return EXCEPTION_CONTINUE_SEARCH;
 
+	if (getThreadHandle(GetCurrentThreadId()) == NULL) {
+		return EXCEPTION_CONTINUE_SEARCH;
+	}
+
 	DEBUG_EVENT msg;
 	msg.dwProcessId = GetCurrentProcessId();
 	msg.dwThreadId = GetCurrentThreadId();
-
 	if (ExceptionInfo->ExceptionRecord->ExceptionCode == DBG_PRINTEXCEPTION_C) {
+
 		msg.dwDebugEventCode = OUTPUT_DEBUG_STRING_EVENT;
 		msg.u.DebugString.fUnicode = 0;
 		msg.u.DebugString.nDebugStringLength = (WORD )ExceptionInfo->ExceptionRecord->ExceptionInformation[0];
 		msg.u.DebugString.lpDebugStringData = (LPSTR )ExceptionInfo->ExceptionRecord->ExceptionInformation[1];
+	} else if (ExceptionInfo->ExceptionRecord->ExceptionCode == DBG_PRINTEXCEPTION_WIDE_C) {
+
+		msg.dwDebugEventCode = OUTPUT_DEBUG_STRING_EVENT;
+		msg.u.DebugString.fUnicode = 1;
+		msg.u.DebugString.nDebugStringLength = (WORD)ExceptionInfo->ExceptionRecord->ExceptionInformation[0];
+		msg.u.DebugString.lpDebugStringData = (LPSTR)ExceptionInfo->ExceptionRecord->ExceptionInformation[1];
 	} else {
 		
 		msg.dwDebugEventCode = EXCEPTION_DEBUG_EVENT;
@@ -244,14 +274,26 @@ LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 		// TitanEngine 中是怎么处理自动跳到下一个指令的，有待研究
 		// 注:	异常处理函数返回时， 会根据 ExceptionInfo->ContextRecord 调用 SetThreadContext
 		//		这可能是调试器设置的单步标志无效的原因
-		if (ack.dwContinueStatus == DBG_CONTINUE && msg.u.Exception.dwFirstChance == 0)
+		// *** 正常的调试流程， STATUS_BREAKPOINT 异常调试器返回 DBG_CONTINUE 时，会从下一次指令执行
+		if (ack.dwContinueStatus == DBG_CONTINUE) {
 #ifdef _M_X64
 			ExceptionInfo->ContextRecord->Rip += 1;
 #else
 			ExceptionInfo->ContextRecord->Eip += 1;
 #endif
+		}
 	}
-	
+
+	/* CONTEXT ctx;
+	ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS | CONTEXT_CONTROL;
+	GetThreadContext(GetCurrentThread(), &ctx);
+	// TODO: Copy debugging register
+	copyDbgRegs(ExceptionInfo->ContextRecord, &ctx);
+	if (ctx.EFlags & SINGLE_STEP_FLAG) {
+		assert(false);
+		ExceptionInfo->ContextRecord->EFlags |= SINGLE_STEP_FLAG; // single step
+	} */
+
 	if (ack.dwContinueStatus == DBG_CONTINUE)
 		return EXCEPTION_CONTINUE_EXECUTION;
 
@@ -279,23 +321,28 @@ PVOID WINAPI GetThreadStartAddress(HANDLE hThread)
     PVOID dwStartAddress;
 		
 	if (NtQueryInformationThread == NULL)
-		pNtQIT NtQueryInformationThread = (pNtQIT)GetProcAddress(GetModuleHandle("ntdll.dll"), "NtQueryInformationThread");
+		NtQueryInformationThread = (pNtQIT)GetProcAddress(GetModuleHandle("ntdll.dll"),
+			"NtQueryInformationThread");
 
-    if(NtQueryInformationThread == NULL) 
-        return 0;
+	if (NtQueryInformationThread == NULL) {
+		MyTrace("%s(): cannot found NtQueryInformationThread()", __FUNCTION__);
+		return 0;
+	}
 
     HANDLE hCurrentProcess = GetCurrentProcess();
     if(!DuplicateHandle(hCurrentProcess, hThread, hCurrentProcess, &hDupHandle, THREAD_QUERY_INFORMATION, FALSE, 0)){
         SetLastError(ERROR_ACCESS_DENIED);
-
+		MyTrace("%s(): cannot found open thread", __FUNCTION__);
         return 0;
     }
 	
 	UINT32 ThreadQuerySetWin32StartAddress = 9;
     ntStatus = NtQueryInformationThread(hDupHandle, ThreadQuerySetWin32StartAddress, &dwStartAddress, sizeof(PVOID), NULL);
     CloseHandle(hDupHandle);
-    if(ntStatus != 0) 
-       return 0;
+	if (ntStatus != 0) {
+		MyTrace("%s(): NtQueryInformationThread() failed. status: %x", __FUNCTION__, ntStatus);
+		return 0;
+	}
 
     return dwStartAddress;
 }
@@ -330,10 +377,13 @@ _TEB* GetThreadTeb(DWORD tid)
 {
 	NTSTATUS ntStatus;
 	if (NtQueryInformationThread == NULL)
-		pNtQIT NtQueryInformationThread = (pNtQIT)GetProcAddress(GetModuleHandle("ntdll.dll"), "NtQueryInformationThread");
+		NtQueryInformationThread = (pNtQIT)GetProcAddress(GetModuleHandle("ntdll.dll"), 
+			"NtQueryInformationThread");
 
-	if (NtQueryInformationThread == NULL)
+	if (NtQueryInformationThread == NULL) {
+		MyTrace("%s(): cannot found NtQueryInformationThread()", __FUNCTION__);
 		return 0;
+	}
 
 	HANDLE hThread = OpenThread(THREAD_QUERY_INFORMATION, FALSE, tid);
 	UINT32 ThreadBasicInformation = 0;
@@ -401,14 +451,14 @@ BOOL XDbgProxy::DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 	case DLL_PROCESS_ATTACH:
 		_mainThreadId = GetProcessMainThread(GetCurrentProcessId());
 		_mainThreadTeb = GetThreadTeb(_mainThreadId);
-		MyTrace("%s(): process(%u) xdbg proxy loaded. thread id: %u", __FUNCTION__, GetCurrentProcessId(), _mainThreadId);
+		// MyTrace("%s(): process(%u) xdbg proxy loaded. thread id: %u", __FUNCTION__, GetCurrentProcessId(), _mainThreadId);
 		break;
 
 	case DLL_PROCESS_DETACH:
-		MyTrace("%s(): process(%u) xdbg proxy unloaded. thread id: %u", __FUNCTION__, GetCurrentProcessId(), _mainThreadId);
+		// MyTrace("%s(): process(%u) xdbg proxy unloaded. thread id: %u", __FUNCTION__, GetCurrentProcessId(), _mainThreadId);
 		break;
 
-	case DLL_THREAD_ATTACH:
+	case DLL_THREAD_ATTACH:		
 		if (!_attached)
 			return TRUE;
 		// REPORT CreateThread
@@ -424,10 +474,14 @@ BOOL XDbgProxy::DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 		}
 
 		addThread(GetCurrentThreadId());
-
+		// MYTRACE("%s(): process(%u) xdbg proxy attach thread. thread id: %u", __FUNCTION__,
+		//	GetCurrentProcessId(), GetCurrentThreadId());
 		break;
 
 	case DLL_THREAD_DETACH:
+		// MYTRACE("%s(): process(%u) xdbg proxy detach thread. thread id: %u", __FUNCTION__,
+		//	GetCurrentProcessId(), GetCurrentThreadId());
+
 		// REPORT ExitThread
 		if (!_attached)
 			return TRUE;
@@ -471,7 +525,7 @@ long XDbgProxy::run()
 
 		if (_attached) {
 
-			MutexGuard guard(&_mutex);
+			/* MutexGuard guard(&_mutex);
 			while (_events.size() > 0) {
 
 				DEBUG_EVENT& msg = _events.front();
@@ -491,7 +545,7 @@ long XDbgProxy::run()
 				}
 
 				_events.pop_front();
-			}
+			} */
 
 			Sleep(100);
 
@@ -577,6 +631,8 @@ void XDbgProxy::sendModuleInfo()
 	char modName[MAX_PATH + 1];
 
 	len /= sizeof(HMODULE);
+	MyTrace("%s(): module count: %d", __FUNCTION__, len);
+
 	for (DWORD i = 0; i < len; i++) {
 		msg.u.LoadDll.dwDebugInfoFileOffset = 0;
 		msg.u.LoadDll.fUnicode = 0;
