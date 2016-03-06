@@ -14,9 +14,15 @@ public:
 		return _hProcess;
 	}
 
+	PVOID getLastPc() const
+	{
+		return (PVOID )_lastContext.Eip;
+	}
+
 protected:
 
 protected:
 	HANDLE		_hPipe;
 	HANDLE		_hProcess;
+	CONTEXT		_lastContext;
 };

@@ -180,6 +180,14 @@ BOOL __stdcall Mine_DebugActiveProcess(DWORD a0)
 	}
 }
 
+BOOL(__stdcall * Real_GetThreadContext)(HANDLE a0,
+	LPCONTEXT a1)
+	= GetThreadContext;
+
+BOOL(__stdcall * Real_SetThreadContext)(HANDLE a0,
+	CONST CONTEXT* a1)
+	= SetThreadContext;
+
 #ifdef _DEBUG
 
 DWORD eventSerial = 0;
@@ -273,6 +281,35 @@ BOOL __stdcall Mine_ContinueDebugEvent(DWORD a0,
 		return Real_ContinueDebugEvent(a0, a1, a2);
 }
 
+BOOL __stdcall Mine_SetThreadContext(HANDLE a0,
+	CONTEXT* a1)
+{
+	MyTrace("%s(%p, %p)", __FUNCTION__, a0, a1);
+	if (dbgctl != NULL) {
+		return Real_SetThreadContext(a0, a1);
+	}
+	else
+		return Real_SetThreadContext(a0, a1);
+}
+
+BOOL __stdcall Mine_GetThreadContext(HANDLE a0,
+	LPCONTEXT a1)
+{
+	MyTrace("%s(%p, %p)", __FUNCTION__, a0, a1);
+	MyTrace("%s(%p, %p)", __FUNCTION__, a0, a1);
+	if (dbgctl != NULL) {
+		BOOL result = Real_GetThreadContext(a0, a1);
+		if (!result)
+			return result;
+		a1->Eip = (DWORD )dbgctl->getLastPc();
+		return result;
+	}
+	else
+		return Real_GetThreadContext(a0, a1);
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 BOOL initializeDebugger()
 {
 	MyTrace("%s()", __FUNCTION__);
@@ -290,6 +327,8 @@ BOOL initializeDebugger()
 	DetourAttach(&(PVOID&)Real_DebugActiveProcess, &(PVOID&)Mine_DebugActiveProcess);
 	DetourAttach(&(PVOID&)Real_WaitForDebugEvent, &(PVOID&)Mine_WaitForDebugEvent);
 	DetourAttach(&(PVOID&)Real_ContinueDebugEvent, &(PVOID&)Mine_ContinueDebugEvent);
+	DetourAttach(&(PVOID&)Real_GetThreadContext, &(PVOID&)Mine_GetThreadContext);
+	DetourAttach(&(PVOID&)Real_SetThreadContext, &(PVOID&)Mine_SetThreadContext);
 	return DetourTransactionCommit() == NO_ERROR;
 }
 

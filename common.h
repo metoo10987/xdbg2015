@@ -28,6 +28,17 @@ struct CONTINUE_DEBUG_EVENT {
 	DWORD dwContinueStatus;
 };
 
+struct RpcRequest {
+	ULONG		id;
+	HANDLE		h;
+	CONTEXT		ctx;
+};
+
+struct RpcResponse {
+	ULONG		result;
+	CONTEXT		ctx;
+};
+
 void MyTrace(LPCSTR fmt, ...);
 
 #ifdef _DEBUG

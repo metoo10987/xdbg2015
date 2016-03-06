@@ -48,64 +48,71 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 
 	switch (lpDebugEvent->dwDebugEventCode) {
 	case CREATE_PROCESS_DEBUG_EVENT:
-	{
-		char fileName[MAX_PATH + 1];
-		GetModuleFileNameEx(_hProcess, (HMODULE)lpDebugEvent->u.CreateProcessInfo.lpBaseOfImage, 
-			fileName, MAX_PATH);
-		lpDebugEvent->u.CreateProcessInfo.hProcess = _hProcess;
-		lpDebugEvent->u.CreateProcessInfo.hThread = OpenThread(THREAD_ALL_ACCESS, FALSE, lpDebugEvent->dwThreadId);
-		MyTrace("%s(): threadId: %d, threadHandle: %x", __FUNCTION__, lpDebugEvent->dwThreadId, 
-			lpDebugEvent->u.CreateProcessInfo.hThread);
-		assert(lpDebugEvent->u.CreateProcessInfo.hThread);
-		lpDebugEvent->u.CreateProcessInfo.hFile = CreateFile(fileName, GENERIC_READ, FILE_SHARE_READ, NULL, 
-			OPEN_EXISTING, 0, NULL);
-		assert(lpDebugEvent->u.CreateProcessInfo.hFile != INVALID_HANDLE_VALUE);
+		{
+			char fileName[MAX_PATH + 1];
+			GetModuleFileNameEx(_hProcess, (HMODULE)lpDebugEvent->u.CreateProcessInfo.lpBaseOfImage, 
+				fileName, MAX_PATH);
+			lpDebugEvent->u.CreateProcessInfo.hProcess = _hProcess;
+			lpDebugEvent->u.CreateProcessInfo.hThread = OpenThread(THREAD_ALL_ACCESS, FALSE, lpDebugEvent->dwThreadId);
+			MyTrace("%s(): threadId: %d, threadHandle: %x", __FUNCTION__, lpDebugEvent->dwThreadId, 
+				lpDebugEvent->u.CreateProcessInfo.hThread);
+			assert(lpDebugEvent->u.CreateProcessInfo.hThread);
+			lpDebugEvent->u.CreateProcessInfo.hFile = CreateFile(fileName, GENERIC_READ, FILE_SHARE_READ, NULL, 
+				OPEN_EXISTING, 0, NULL);
+			assert(lpDebugEvent->u.CreateProcessInfo.hFile != INVALID_HANDLE_VALUE);
 
-		MyTrace("%s(): CREATE_PROCESS_DEBUG_EVENT: hFile = %x, hProcess = %x, hThread = %x", 
-			__FUNCTION__, lpDebugEvent->u.CreateProcessInfo.hFile, 
-			lpDebugEvent->u.CreateProcessInfo.hProcess, lpDebugEvent->u.CreateProcessInfo.hThread);
-	}
-	break;
+			MyTrace("%s(): CREATE_PROCESS_DEBUG_EVENT: hFile = %x, hProcess = %x, hThread = %x", 
+				__FUNCTION__, lpDebugEvent->u.CreateProcessInfo.hFile, 
+				lpDebugEvent->u.CreateProcessInfo.hProcess, lpDebugEvent->u.CreateProcessInfo.hThread);
+		}
+		break;
 
 	case CREATE_THREAD_DEBUG_EVENT:
-	{
-		lpDebugEvent->u.CreateThread.hThread = OpenThread(THREAD_ALL_ACCESS, FALSE, lpDebugEvent->dwThreadId);
-		MyTrace("%s(): CREATE_THREAD_DEBUG_EVENT. hThread: %x, tid: %u", __FUNCTION__, 
-			lpDebugEvent->u.CreateThread.hThread, lpDebugEvent->dwThreadId);
-	}
-	break;
+		{
+			lpDebugEvent->u.CreateThread.hThread = OpenThread(THREAD_ALL_ACCESS, FALSE, lpDebugEvent->dwThreadId);
+			MyTrace("%s(): CREATE_THREAD_DEBUG_EVENT. hThread: %x, tid: %u", __FUNCTION__, 
+				lpDebugEvent->u.CreateThread.hThread, lpDebugEvent->dwThreadId);
+		}
+		break;
 
 	case LOAD_DLL_DEBUG_EVENT:
-	{
-		SIZE_T len;
-		if (lpDebugEvent->u.LoadDll.fUnicode){
-			wchar_t buf[MAX_PATH];
-			if (!ReadProcessMemory(_hProcess, lpDebugEvent->u.LoadDll.lpImageName, buf, sizeof(buf), &len)) {
-				assert(false);
-				break;
+		{
+			SIZE_T len;
+			if (lpDebugEvent->u.LoadDll.fUnicode){
+				wchar_t buf[MAX_PATH];
+				if (!ReadProcessMemory(_hProcess, lpDebugEvent->u.LoadDll.lpImageName, buf, sizeof(buf), &len)) {
+					assert(false);
+					break;
+				}
+
+				lpDebugEvent->u.LoadDll.hFile = CreateFileW((LPCWSTR)buf, GENERIC_READ,
+					FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+
+				MyTrace("%s(): LOAD_DLL_DEBUG_EVENT. dll: %S, hFile: %x", __FUNCTION__,
+					buf, lpDebugEvent->u.LoadDll.hFile);
 			}
+			else {
+				char buf[MAX_PATH];
+				if (!ReadProcessMemory(_hProcess, lpDebugEvent->u.LoadDll.lpImageName, buf, sizeof(buf), &len)) {
+					assert(false);
+					break;
+				}
 
-			lpDebugEvent->u.LoadDll.hFile = CreateFileW((LPCWSTR)buf, GENERIC_READ,
-				FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+				lpDebugEvent->u.LoadDll.hFile = CreateFileA((LPCSTR)buf, GENERIC_READ,
+					FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
 
-			MyTrace("%s(): LOAD_DLL_DEBUG_EVENT. dll: %S, hFile: %x", __FUNCTION__,
-				buf, lpDebugEvent->u.LoadDll.hFile);
-		}
-		else {
-			char buf[MAX_PATH];
-			if (!ReadProcessMemory(_hProcess, lpDebugEvent->u.LoadDll.lpImageName, buf, sizeof(buf), &len)) {
-				assert(false);
-				break;
+				MyTrace("%s(): LOAD_DLL_DEBUG_EVENT. dll: %s, hFile: %x", __FUNCTION__,
+					buf, lpDebugEvent->u.LoadDll.hFile);
 			}
-
-			lpDebugEvent->u.LoadDll.hFile = CreateFileA((LPCSTR)buf, GENERIC_READ,
-				FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
-
-			MyTrace("%s(): LOAD_DLL_DEBUG_EVENT. dll: %s, hFile: %x", __FUNCTION__,
-				buf, lpDebugEvent->u.LoadDll.hFile);
+			assert(lpDebugEvent->u.LoadDll.hFile != INVALID_HANDLE_VALUE);
 		}
-		assert(lpDebugEvent->u.LoadDll.hFile != INVALID_HANDLE_VALUE);
-	}
+		break;
+
+	case EXCEPTION_DEBUG_EVENT:
+		{
+			_lastContext.Eip = (DWORD )lpDebugEvent->u.Exception.ExceptionRecord.ExceptionAddress;
+		}
+		break;
 
 	default:
 		break;

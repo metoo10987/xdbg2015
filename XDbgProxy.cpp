@@ -170,8 +170,8 @@ VOID CALLBACK XDbgProxy::LdrDllNotification(ULONG NotificationReason, PCLDR_DLL_
 	} else if (NotificationReason == LDR_DLL_NOTIFICATION_REASON_LOADED) {
 		msg.dwDebugEventCode = UNLOAD_DLL_DEBUG_EVENT;
 		msg.u.UnloadDll.lpBaseOfDll = NotificationData->Unloaded.DllBase;
-	} /* else
-		return; */
+	} else
+		return;
 	
 	CONTINUE_DEBUG_EVENT ack;
 	if (!sendDbgEvent(msg, ack)) {
