@@ -286,6 +286,23 @@ BOOL __stdcall Mine_SetThreadContext(HANDLE a0,
 {
 	MyTrace("%s(%p, %p)", __FUNCTION__, a0, a1);
 	if (dbgctl != NULL) {
+
+		if (a1->ContextFlags & CONTEXT_CONTROL) {
+
+			MyTrace("%s(): new pc: %x", __FUNCTION__, a1->Eip);
+			dbgctl->setPC(a1->Eip);
+			a1->Eip = dbgctl->getLastPc();
+			MyTrace("%s(): modified pc: %x", __FUNCTION__, a1->Eip);
+			if (a1->EFlags & SINGLE_STEP_FLAG) {
+				dbgctl->setFlags(CDE_SINGLE_STEP);
+				a1->EFlags &= ~SINGLE_STEP_FLAG;
+				MyTrace("%s(): single trip toggled", __FUNCTION__);
+			} else {
+				dbgctl->setFlags(0);
+				MyTrace("%s(): single trip cleared", __FUNCTION__);
+			}
+		}
+
 		return Real_SetThreadContext(a0, a1);
 	}
 	else
@@ -295,13 +312,23 @@ BOOL __stdcall Mine_SetThreadContext(HANDLE a0,
 BOOL __stdcall Mine_GetThreadContext(HANDLE a0,
 	LPCONTEXT a1)
 {
-	MyTrace("%s(%p, %p)", __FUNCTION__, a0, a1);
-	MyTrace("%s(%p, %p)", __FUNCTION__, a0, a1);
+	// MyTrace("%s(%p, %p)", __FUNCTION__, a0, a1);
 	if (dbgctl != NULL) {
 		BOOL result = Real_GetThreadContext(a0, a1);
 		if (!result)
 			return result;
-		a1->Eip = (DWORD )dbgctl->getLastPc();
+		if (a1->ContextFlags & CONTEXT_CONTROL) {
+			if (dbgctl->getPC())
+				a1->Eip = dbgctl->getPC();
+			else if (dbgctl->getExceptPc())
+				a1->Eip = (DWORD)dbgctl->getExceptPc();
+			// MyTrace("%s(%p, %p). pc = %p", __FUNCTION__, a0, a1, a1->Eip);
+			if (dbgctl->getFlags()) {
+				a1->EFlags |= SINGLE_STEP_FLAG;
+				MyTrace("%s(%p, %p). SINGLE_STEP_FLAG was setted", __FUNCTION__, a0, a1);
+			}
+		}
+
 		return result;
 	}
 	else

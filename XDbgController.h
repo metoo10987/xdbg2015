@@ -1,4 +1,7 @@
 #pragma once
+
+#include "common.h"
+
 class XDbgController
 {
 public:
@@ -14,9 +17,34 @@ public:
 		return _hProcess;
 	}
 
-	PVOID getLastPc() const
+	ULONG getExceptPc() const
 	{
-		return (PVOID )_lastContext.Eip;
+		return _exceptAddr;
+	}
+
+	ULONG getLastPc() const
+	{
+		return _lastContext.Eip;
+	}
+
+	void setPC(ULONG pc)
+	{
+		_pc = pc;
+	}
+	
+	ULONG getPC() const
+	{
+		return _pc;
+	}
+
+	void setFlags(ULONG flags)
+	{
+		_flags = flags;
+	}
+
+	ULONG getFlags() const
+	{
+		return _flags;
 	}
 
 protected:
@@ -24,5 +52,9 @@ protected:
 protected:
 	HANDLE		_hPipe;
 	HANDLE		_hProcess;
-	CONTEXT		_lastContext;
+	ULONG		_exceptAddr;
+	CONTEXT&	_lastContext;
+	ULONG		_pc;
+	ULONG		_flags;
+	WAIT_DEBUG_EVENT	_event;
 };

@@ -22,21 +22,19 @@ static inline std::string makePipeName(DWORD pid)
 	return buf;
 }
 
+#define CDE_SINGLE_STEP		1
+
+struct WAIT_DEBUG_EVENT {
+	DEBUG_EVENT		event;
+	CONTEXT			ctx;
+};
+
 struct CONTINUE_DEBUG_EVENT {
-	DWORD dwProcessId;
-	DWORD dwThreadId;
-	DWORD dwContinueStatus;
-};
-
-struct RpcRequest {
-	ULONG		id;
-	HANDLE		h;
-	CONTEXT		ctx;
-};
-
-struct RpcResponse {
-	ULONG		result;
-	CONTEXT		ctx;
+	DWORD	dwProcessId;
+	DWORD	dwThreadId;
+	DWORD	dwContinueStatus;
+	ULONG	newpc;
+	ULONG	flags;
 };
 
 void MyTrace(LPCSTR fmt, ...);

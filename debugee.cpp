@@ -6,15 +6,17 @@
 
 int _tmain(int argc, _TCHAR* argv[])
 {
-	// LoadLibrary("xdbgcore.dll");
+	LoadLibrary("xdbgcore.dll");
 	/* XDbgProxy::instance().DllMain(GetModuleHandle(NULL), DLL_PROCESS_ATTACH, NULL);
 
 	if (!XDbgProxy::instance().initialize()) {
 		return -1;
 	} */
 	
-	Sleep(10000);
+	// Sleep(10000);
 	//__try {
+	int* p = NULL;
+	*p = 10;
 	DebugBreak();
 	return 0;
 	Sleep(10000);

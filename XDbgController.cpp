@@ -4,9 +4,14 @@
 #include "XDbgController.h"
 #include "common.h"
 
-XDbgController::XDbgController(void)
+XDbgController::XDbgController(void) : _lastContext(_event.ctx)
 {
 	_hPipe = INVALID_HANDLE_VALUE;
+	_pc = 0;
+	_flags = 0;
+	_exceptAddr = 0;
+	_hProcess = NULL;
+	memset(&_lastContext, 0, sizeof(_lastContext));
 }
 
 
@@ -36,15 +41,37 @@ bool XDbgController::attach(DWORD pid)
 	return true;
 }
 
+extern BOOL(__stdcall * Real_GetThreadContext)(HANDLE a0,
+	LPCONTEXT a1);
+
 bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 {
 	MyTrace("%s()", __FUNCTION__);
 	assert(dwMilliseconds == INFINITE); // no timeout
 	DWORD len;
-	if (!ReadFile(_hPipe, lpDebugEvent, sizeof(*lpDebugEvent), &len, NULL)) {
+	if (!ReadFile(_hPipe, &_event, sizeof(_event), &len, NULL)) {
 		MyTrace("%s(): read pipe failed, pipe: %p", __FUNCTION__, _hPipe);
 		return false;
 	}
+
+	*lpDebugEvent = _event.event;
+	// _lastContext = _event.ctx;
+	HANDLE hThread = OpenThread(THREAD_ALL_ACCESS, FALSE, lpDebugEvent->dwThreadId);
+	assert(hThread);
+	// SuspendThread(hThread);
+	_lastContext.ContextFlags = CONTEXT_CONTROL;
+	if (!Real_GetThreadContext(hThread, &_lastContext)) {
+		assert(false);
+	}
+	// ResumeThread(hThread);
+	CloseHandle(hThread);
+
+
+	MyTrace("%s(): tid: %d, lastPc: %p, event_code: %x", __FUNCTION__, lpDebugEvent->dwThreadId, 
+		_lastContext.Eip, lpDebugEvent->dwDebugEventCode);
+
+	_pc = 0;
+	_flags = 0;
 
 	switch (lpDebugEvent->dwDebugEventCode) {
 	case CREATE_PROCESS_DEBUG_EVENT:
@@ -110,7 +137,14 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 
 	case EXCEPTION_DEBUG_EVENT:
 		{
-			_lastContext.Eip = (DWORD )lpDebugEvent->u.Exception.ExceptionRecord.ExceptionAddress;
+			_exceptAddr = (DWORD)lpDebugEvent->u.Exception.ExceptionRecord.ExceptionAddress;
+
+			MyTrace("%s(): exception code: %p, addr: %x", __FUNCTION__, lpDebugEvent->u.Exception.ExceptionRecord.ExceptionCode,
+				_exceptAddr);
+
+			if (lpDebugEvent->u.Exception.ExceptionRecord.ExceptionCode == STATUS_SINGLE_STEP) {
+				MyTrace("STATUS_SINGLE_STEP");
+			}
 		}
 		break;
 
@@ -129,6 +163,8 @@ bool XDbgController::continueEvent(DWORD dwProcessId, DWORD dwThreadId, DWORD dw
 	ack.dwProcessId = dwProcessId;
 	ack.dwThreadId = dwThreadId;
 	ack.dwContinueStatus = dwContinueStatus;
+	ack.newpc = _pc;
+	ack.flags = _flags;
 	DWORD len;
 	if (!WriteFile(_hPipe, &ack, sizeof(ack), &len, NULL)) {
 		return false;

@@ -3,9 +3,7 @@
 #include <WinNT.h>
 #include <tlhelp32.h>
 #include <Psapi.h>
-
 #include "XDbgProxy.h"
-#include "common.h"
 #include <assert.h>
 
 XDbgProxy::XDbgProxy(void)
@@ -14,6 +12,9 @@ XDbgProxy::XDbgProxy(void)
 	memset(&_lastException, 0, sizeof(_lastException));
 	_stopFlag = 0;
 	_attached = false;
+
+	_lastExceptCode = 0;
+	_lastExceptAddr = 0;
 }
 
 
@@ -25,9 +26,9 @@ XDbgProxy::~XDbgProxy(void)
 
 #define LAST_EVENT		RIP_EVENT
 
-BOOL XDbgProxy::sendDbgEvent(const DEBUG_EVENT& event)
+BOOL XDbgProxy::sendDbgEvent(const WAIT_DEBUG_EVENT& event)
 {
-	if (event.dwDebugEventCode > LAST_EVENT) {
+	if (event.event.dwDebugEventCode > LAST_EVENT) {
 		assert(false);
 		return FALSE;
 	}
@@ -52,7 +53,7 @@ BOOL XDbgProxy::recvDbgAck(struct CONTINUE_DEBUG_EVENT& ack)
 	return TRUE;
 }
 
-BOOL XDbgProxy::sendDbgEvent(const DEBUG_EVENT& event, struct CONTINUE_DEBUG_EVENT& ack)
+BOOL XDbgProxy::sendDbgEvent(const WAIT_DEBUG_EVENT& event, struct CONTINUE_DEBUG_EVENT& ack)
 {
 	BOOL result;
 	suspendThreads(GetCurrentThreadId());
@@ -64,7 +65,7 @@ BOOL XDbgProxy::sendDbgEvent(const DEBUG_EVENT& event, struct CONTINUE_DEBUG_EVE
 	return result;
 }
 
-void XDbgProxy::postDbgEvent(const DEBUG_EVENT& event)
+void XDbgProxy::postDbgEvent(const WAIT_DEBUG_EVENT& event)
 {
 	MutexGuard guard(&_mutex);
 	_events.push_back(event);
@@ -155,7 +156,8 @@ VOID CALLBACK XDbgProxy::_LdrDllNotification(ULONG NotificationReason, PCLDR_DLL
 VOID CALLBACK XDbgProxy::LdrDllNotification(ULONG NotificationReason, PCLDR_DLL_NOTIFICATION_DATA NotificationData, 
 	PVOID Context)
 {
-	DEBUG_EVENT msg;
+	WAIT_DEBUG_EVENT event;
+	DEBUG_EVENT& msg = event.event;
 	msg.dwProcessId = GetCurrentProcessId();
 	msg.dwThreadId = GetCurrentThreadId();
 
@@ -174,7 +176,7 @@ VOID CALLBACK XDbgProxy::LdrDllNotification(ULONG NotificationReason, PCLDR_DLL_
 		return;
 	
 	CONTINUE_DEBUG_EVENT ack;
-	if (!sendDbgEvent(msg, ack)) {
+	if (!sendDbgEvent(event, ack)) {
 
 	}	
 }
@@ -222,7 +224,13 @@ static inline void copyDbgRegs(CONTEXT* dest, const CONTEXT* src)
 
 LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 {
-	printf("%s, code: %x\n", __FUNCTION__, ExceptionInfo->ExceptionRecord->ExceptionCode);
+	/* printf("%s, code: %x, addr: %p\n", __FUNCTION__, ExceptionInfo->ExceptionRecord->ExceptionCode, 
+		ExceptionInfo->ExceptionRecord->ExceptionAddress);
+	CONTEXT ctx;
+	ctx.ContextFlags = CONTEXT_CONTROL;
+	GetThreadContext(GetCurrentThread(), &ctx);
+	printf("%s(): pc: %p\n", __FUNCTION__, ctx.Eip); */
+
 	if (!_attached)
 		return EXCEPTION_CONTINUE_SEARCH;
 
@@ -233,7 +241,9 @@ LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 		return EXCEPTION_CONTINUE_SEARCH;
 	}
 
-	DEBUG_EVENT msg;
+	WAIT_DEBUG_EVENT event;
+	DEBUG_EVENT& msg = event.event;
+
 	msg.dwProcessId = GetCurrentProcessId();
 	msg.dwThreadId = GetCurrentThreadId();
 	if (ExceptionInfo->ExceptionRecord->ExceptionCode == DBG_PRINTEXCEPTION_C) {
@@ -251,19 +261,31 @@ LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 	} else {
 		
 		msg.dwDebugEventCode = EXCEPTION_DEBUG_EVENT;
-		if (_lastException.ExceptionCode == ExceptionInfo->ExceptionRecord->ExceptionCode && 
+		
+		/* if (_lastException.ExceptionCode == ExceptionInfo->ExceptionRecord->ExceptionCode && 
 			_lastException.ExceptionAddress == ExceptionInfo->ExceptionRecord->ExceptionAddress) {
 			msg.u.Exception.dwFirstChance = 0;
 		} else {
 			msg.u.Exception.dwFirstChance = 1;
-		}
+		} */
+
+		if (_lastException == ExceptionInfo->ExceptionRecord && 
+			_lastExceptCode == ExceptionInfo->ExceptionRecord->ExceptionCode && 
+			_lastExceptAddr == ExceptionInfo->ExceptionRecord->ExceptionAddress) {
+
+			msg.u.Exception.dwFirstChance = 0;
+		} else
+			msg.u.Exception.dwFirstChance = 1;
 
 		msg.u.Exception.ExceptionRecord = *ExceptionInfo->ExceptionRecord;
-		_lastException = *ExceptionInfo->ExceptionRecord;
-	}
+		_lastException = ExceptionInfo->ExceptionRecord;
+		_lastExceptCode = ExceptionInfo->ExceptionRecord->ExceptionCode;
+		_lastExceptAddr = ExceptionInfo->ExceptionRecord->ExceptionAddress;
+	};
 
+	event.ctx = *ExceptionInfo->ContextRecord;
 	CONTINUE_DEBUG_EVENT ack;
-	if (!sendDbgEvent(msg, ack)) {
+	if (!sendDbgEvent(event, ack)) {
 		// log error
 		return EXCEPTION_CONTINUE_SEARCH;
 	}
@@ -275,12 +297,45 @@ LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 		// 注:	异常处理函数返回时， 会根据 ExceptionInfo->ContextRecord 调用 SetThreadContext
 		//		这可能是调试器设置的单步标志无效的原因
 		// *** 正常的调试流程， STATUS_BREAKPOINT 异常调试器返回 DBG_CONTINUE 时，会从下一次指令执行
+
+		if (ack.newpc) {
+#ifdef _M_X64
+			ExceptionInfo->ContextRecord->Rip = ack.newpc;
+#else
+			ExceptionInfo->ContextRecord->Eip = ack.newpc;
+#endif
+		}
+		
 		if (ack.dwContinueStatus == DBG_CONTINUE) {
 #ifdef _M_X64
 			ExceptionInfo->ContextRecord->Rip += 1;
 #else
 			ExceptionInfo->ContextRecord->Eip += 1;
 #endif
+		}
+
+		if (ack.flags & CDE_SINGLE_STEP) {
+			ExceptionInfo->ContextRecord->EFlags |= SINGLE_STEP_FLAG; // single step
+		} else {
+			ExceptionInfo->ContextRecord->EFlags &= ~SINGLE_STEP_FLAG;
+		}
+	}
+
+	if (ExceptionInfo->ExceptionRecord->ExceptionCode == STATUS_SINGLE_STEP) {
+
+		if (ack.newpc) {
+#ifdef _M_X64
+			ExceptionInfo->ContextRecord->Rip = ack.newpc;
+#else
+			ExceptionInfo->ContextRecord->Eip = ack.newpc;
+#endif
+		}
+
+		if (ack.flags & CDE_SINGLE_STEP) {
+			ExceptionInfo->ContextRecord->EFlags |= SINGLE_STEP_FLAG; // single step
+		}
+		else {
+			ExceptionInfo->ContextRecord->EFlags &= ~SINGLE_STEP_FLAG;
 		}
 	}
 
@@ -444,7 +499,8 @@ DWORD GetProcessMainThread(DWORD dwProcID)
 // SO, THIS MODULE MUST BE A DLL
 BOOL XDbgProxy::DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 {
-	DEBUG_EVENT msg;
+	WAIT_DEBUG_EVENT event;
+	DEBUG_EVENT& msg = event.event;
 	CONTINUE_DEBUG_EVENT ack;
 
 	switch (reason) {
@@ -469,7 +525,7 @@ BOOL XDbgProxy::DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 		msg.u.CreateThread.lpStartAddress = (LPTHREAD_START_ROUTINE )GetThreadStartAddress(GetCurrentThread());
 		msg.u.CreateThread.lpThreadLocalBase = NtCurrentTeb();
 
-		if (!sendDbgEvent(msg, ack)) {
+		if (!sendDbgEvent(event, ack)) {
 
 		}
 
@@ -491,7 +547,7 @@ BOOL XDbgProxy::DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 		if (!GetExitCodeThread(GetCurrentThread(), &msg.u.ExitThread.dwExitCode))
 			msg.u.ExitThread.dwExitCode = 0;
 
-		if (!sendDbgEvent(msg, ack)) {
+		if (!sendDbgEvent(event, ack)) {
 			
 		}
 
@@ -590,7 +646,8 @@ void XDbgProxy::onDbgDisconnect()
 void XDbgProxy::sendProcessInfo()
 {
 	MyTrace("%s()", __FUNCTION__);
-	DEBUG_EVENT msg;
+	WAIT_DEBUG_EVENT event;
+	DEBUG_EVENT& msg = event.event;
 	CONTINUE_DEBUG_EVENT ack;
 	msg.dwProcessId = GetCurrentProcessId();
 	msg.dwThreadId = _mainThreadId;
@@ -606,14 +663,15 @@ void XDbgProxy::sendProcessInfo()
 	msg.u.CreateProcessInfo.lpStartAddress = (LPTHREAD_START_ROUTINE)GetThreadStartAddress(_mainThreadId);
 	msg.u.CreateProcessInfo.lpThreadLocalBase = _mainThreadTeb;
 	msg.u.CreateProcessInfo.nDebugInfoSize = 0;
-	sendDbgEvent(msg, ack);
+	sendDbgEvent(event, ack);
 }
 
 void XDbgProxy::sendModuleInfo()
 {
 	MyTrace("%s()", __FUNCTION__);
 
-	DEBUG_EVENT msg;
+	WAIT_DEBUG_EVENT event;
+	DEBUG_EVENT& msg = event.event;
 	CONTINUE_DEBUG_EVENT ack;
 
 	HMODULE hModules[512];
@@ -640,7 +698,7 @@ void XDbgProxy::sendModuleInfo()
 		msg.u.LoadDll.lpBaseOfDll = hModules[i];
 		GetModuleFileName(hModules[i], modName, MAX_PATH);
 		msg.u.LoadDll.lpImageName = modName;
-		sendDbgEvent(msg, ack);
+		sendDbgEvent(event, ack);
 	}
 }
 
@@ -648,7 +706,8 @@ void XDbgProxy::sendThreadInfo()
 {
 	MyTrace("%s()", __FUNCTION__);
 
-	DEBUG_EVENT msg;
+	WAIT_DEBUG_EVENT event;
+	DEBUG_EVENT& msg = event.event;
 	CONTINUE_DEBUG_EVENT ack;
 
 	msg.dwDebugEventCode = CREATE_THREAD_DEBUG_EVENT;
@@ -669,7 +728,7 @@ void XDbgProxy::sendThreadInfo()
 					msg.u.CreateThread.lpStartAddress = (LPTHREAD_START_ROUTINE)GetThreadStartAddress(GetCurrentThread());
 					msg.u.CreateThread.lpThreadLocalBase = GetThreadTeb(te.th32ThreadID);
 					addThread(te.th32ThreadID);
-					sendDbgEvent(msg, ack);
+					sendDbgEvent(event, ack);
 				}
 
 				te.dwSize = sizeof(te);

@@ -5,6 +5,7 @@
 
 #include <list>
 #include <map>
+#include "common.h"
 
 class XDbgProxy : public Thread
 {
@@ -38,11 +39,11 @@ protected:
 
 	virtual long run();
 
-	BOOL sendDbgEvent(const DEBUG_EVENT& event);
+	BOOL sendDbgEvent(const WAIT_DEBUG_EVENT& event);
 	BOOL recvDbgAck(struct CONTINUE_DEBUG_EVENT& ack);
-	BOOL sendDbgEvent(const DEBUG_EVENT& event, struct CONTINUE_DEBUG_EVENT& ack);
+	BOOL sendDbgEvent(const WAIT_DEBUG_EVENT& event, struct CONTINUE_DEBUG_EVENT& ack);
 
-	void postDbgEvent(const DEBUG_EVENT& event);
+	void postDbgEvent(const WAIT_DEBUG_EVENT& event);
 
 	void onDbgConnect();
 	void onDbgDisconnect();
@@ -60,9 +61,11 @@ protected:
 protected:
 	HANDLE					_hPipe;
 	bool					_attached;
-	EXCEPTION_RECORD		_lastException;
+	EXCEPTION_RECORD*		_lastException;
+	ULONG					_lastExceptCode;
+	PVOID					_lastExceptAddr;
 	volatile int			_stopFlag;
-	std::list<DEBUG_EVENT>	_events;
+	std::list<WAIT_DEBUG_EVENT>	_events;
 	Mutex					_mutex;
 	DWORD					_mainThreadId;
 	_TEB*					_mainThreadTeb;
