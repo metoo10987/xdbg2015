@@ -1,0 +1,5 @@
+开发计划
+
+1 清理完善优化代码
+2 waitdebugevent支持timeout
+3 用native api代替 xdbgproxy中的所有win32 api， 防止调试时产生冲突
