@@ -299,19 +299,11 @@ LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 		// *** 正常的调试流程， STATUS_BREAKPOINT 异常调试器返回 DBG_CONTINUE 时，会从下一次指令执行
 
 		if (ack.newpc) {
-#ifdef _M_X64
-			ExceptionInfo->ContextRecord->Rip = ack.newpc;
-#else
-			ExceptionInfo->ContextRecord->Eip = ack.newpc;
-#endif
+			CTX_PC_REG(ExceptionInfo->ContextRecord) = ack.newpc;
 		} else {
 
 			if (ack.dwContinueStatus == DBG_CONTINUE) {
-#ifdef _M_X64
-				ExceptionInfo->ContextRecord->Rip += 1;
-#else
-				ExceptionInfo->ContextRecord->Eip += 1;
-#endif
+				CTX_PC_REG(ExceptionInfo->ContextRecord) += 1;
 			}
 		}
 
@@ -325,11 +317,7 @@ LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 	if (ExceptionInfo->ExceptionRecord->ExceptionCode == STATUS_SINGLE_STEP) {
 
 		if (ack.newpc) {
-#ifdef _M_X64
-			ExceptionInfo->ContextRecord->Rip = ack.newpc;
-#else
-			ExceptionInfo->ContextRecord->Eip = ack.newpc;
-#endif
+			CTX_PC_REG(ExceptionInfo->ContextRecord) = ack.newpc;
 		}
 
 		if (ack.flags & CDE_SINGLE_STEP) {

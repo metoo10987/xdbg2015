@@ -46,3 +46,9 @@ void MyTrace(LPCSTR fmt, ...);
 #endif
 
 #define SINGLE_STEP_FLAG	0x100
+
+#ifdef _M_X64
+#define CTX_PC_REG(CTX)		(CTX)->Rip
+#else
+#define CTX_PC_REG(CTX)		(CTX)->Eip
+#endif
