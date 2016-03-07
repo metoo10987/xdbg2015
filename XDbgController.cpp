@@ -65,8 +65,7 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 	}
 	// ResumeThread(hThread);
 	CloseHandle(hThread);
-
-
+	
 	MyTrace("%s(): tid: %d, lastPc: %p, event_code: %x", __FUNCTION__, lpDebugEvent->dwThreadId, 
 		_lastContext.Eip, lpDebugEvent->dwDebugEventCode);
 
@@ -142,6 +141,9 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 			MyTrace("%s(): exception code: %p, addr: %x", __FUNCTION__, lpDebugEvent->u.Exception.ExceptionRecord.ExceptionCode,
 				_exceptAddr);
 
+			/* if (lpDebugEvent->u.Exception.ExceptionRecord.ExceptionCode == STATUS_BREAKPOINT)
+				_exceptAddr += 1;
+			*/
 			if (lpDebugEvent->u.Exception.ExceptionRecord.ExceptionCode == STATUS_SINGLE_STEP) {
 				MyTrace("STATUS_SINGLE_STEP");
 			}

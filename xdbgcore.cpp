@@ -325,7 +325,7 @@ BOOL __stdcall Mine_GetThreadContext(HANDLE a0,
 			// MyTrace("%s(%p, %p). pc = %p", __FUNCTION__, a0, a1, a1->Eip);
 			if (dbgctl->getFlags()) {
 				a1->EFlags |= SINGLE_STEP_FLAG;
-				MyTrace("%s(%p, %p). SINGLE_STEP_FLAG was setted", __FUNCTION__, a0, a1);
+				// MyTrace("%s(%p, %p). SINGLE_STEP_FLAG was setted", __FUNCTION__, a0, a1);
 			}
 		}
 
