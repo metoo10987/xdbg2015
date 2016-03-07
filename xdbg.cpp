@@ -30,6 +30,10 @@ DWORD GetProcessByName(const char *filename)
 	return 0;
 }
 
+BOOL(__stdcall * Real_GetThreadContext)(HANDLE a0,
+	LPCONTEXT a1)
+	= GetThreadContext;
+
 int _tmain(int argc, _TCHAR* argv[])
 {
 	// LoadLibrary("xdbgcore.dll");
