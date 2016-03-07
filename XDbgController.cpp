@@ -10,6 +10,7 @@ XDbgController::XDbgController(void) : _lastContext(_event.ctx)
 	_pc = 0;
 	_flags = 0;
 	_exceptAddr = 0;
+	_exceptCode = 0;
 	_hProcess = NULL;
 	memset(&_lastContext, 0, sizeof(_lastContext));
 }
@@ -71,6 +72,8 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 
 	_pc = 0;
 	_flags = 0;
+	_exceptAddr = 0;
+	_exceptCode = 0;
 
 	switch (lpDebugEvent->dwDebugEventCode) {
 	case CREATE_PROCESS_DEBUG_EVENT:
@@ -136,8 +139,8 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 
 	case EXCEPTION_DEBUG_EVENT:
 		{
-			_exceptAddr = (DWORD)lpDebugEvent->u.Exception.ExceptionRecord.ExceptionAddress;
-
+			_exceptAddr = (ULONG )lpDebugEvent->u.Exception.ExceptionRecord.ExceptionAddress;
+			_exceptCode = (ULONG)lpDebugEvent->u.Exception.ExceptionRecord.ExceptionCode;
 			MyTrace("%s(): exception code: %p, addr: %x", __FUNCTION__, lpDebugEvent->u.Exception.ExceptionRecord.ExceptionCode,
 				_exceptAddr);
 
@@ -171,6 +174,11 @@ bool XDbgController::continueEvent(DWORD dwProcessId, DWORD dwThreadId, DWORD dw
 	if (!WriteFile(_hPipe, &ack, sizeof(ack), &len, NULL)) {
 		return false;
 	}
+
+	_pc = 0;
+	_flags = 0;
+	_exceptAddr = 0;
+	_exceptCode = 0;
 
 	return true;
 }

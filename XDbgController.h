@@ -22,6 +22,11 @@ public:
 		return _exceptAddr;
 	}
 
+	ULONG getExceptCode() const
+	{
+		return _exceptCode;
+	}
+
 	ULONG getLastPc() const
 	{
 		return _lastContext.Eip;
@@ -53,6 +58,7 @@ protected:
 	HANDLE		_hPipe;
 	HANDLE		_hProcess;
 	ULONG		_exceptAddr;
+	ULONG		_exceptCode;
 	CONTEXT&	_lastContext;
 	ULONG		_pc;
 	ULONG		_flags;

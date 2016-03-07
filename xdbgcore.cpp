@@ -322,6 +322,11 @@ BOOL __stdcall Mine_GetThreadContext(HANDLE a0,
 				a1->Eip = dbgctl->getPC();
 			else if (dbgctl->getExceptPc())
 				a1->Eip = (DWORD)dbgctl->getExceptPc();
+
+			/* if (dbgctl->getExceptCode() == STATUS_BREAKPOINT) {
+				a1->Eip += 1;
+			} */
+
 			// MyTrace("%s(%p, %p). pc = %p", __FUNCTION__, a0, a1, a1->Eip);
 			if (dbgctl->getFlags()) {
 				a1->EFlags |= SINGLE_STEP_FLAG;
