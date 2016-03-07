@@ -304,14 +304,15 @@ LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 #else
 			ExceptionInfo->ContextRecord->Eip = ack.newpc;
 #endif
-		}
-		
-		if (ack.dwContinueStatus == DBG_CONTINUE) {
+		} else {
+
+			if (ack.dwContinueStatus == DBG_CONTINUE) {
 #ifdef _M_X64
-			ExceptionInfo->ContextRecord->Rip += 1;
+				ExceptionInfo->ContextRecord->Rip += 1;
 #else
-			ExceptionInfo->ContextRecord->Eip += 1;
+				ExceptionInfo->ContextRecord->Eip += 1;
 #endif
+			}
 		}
 
 		if (ack.flags & CDE_SINGLE_STEP) {

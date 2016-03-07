@@ -321,7 +321,10 @@ BOOL __stdcall Mine_GetThreadContext(HANDLE a0,
 			if (dbgctl->getPC())
 				a1->Eip = dbgctl->getPC();
 			else if (dbgctl->getExceptPc())
-				a1->Eip = (DWORD)dbgctl->getExceptPc();
+				if (dbgctl->getExceptCode() == STATUS_BREAKPOINT)
+					a1->Eip = (DWORD)dbgctl->getExceptPc() + 1;
+				else
+					a1->Eip = (DWORD)dbgctl->getExceptPc();
 
 			/* if (dbgctl->getExceptCode() == STATUS_BREAKPOINT) {
 				a1->Eip += 1;
