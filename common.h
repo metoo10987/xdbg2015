@@ -52,3 +52,6 @@ void MyTrace(LPCSTR fmt, ...);
 #else
 #define CTX_PC_REG(CTX)		(CTX)->Eip
 #endif
+
+#define ATTACHED_EVENT	(RIP_EVENT + 1)
+#define LAST_EVENT		ATTACHED_EVENT

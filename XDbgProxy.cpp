@@ -24,8 +24,6 @@ XDbgProxy::~XDbgProxy(void)
 		CloseHandle(_hPipe);
 }
 
-#define LAST_EVENT		RIP_EVENT
-
 BOOL XDbgProxy::sendDbgEvent(const WAIT_DEBUG_EVENT& event)
 {
 	if (event.event.dwDebugEventCode > LAST_EVENT) {
@@ -53,15 +51,17 @@ BOOL XDbgProxy::recvDbgAck(struct CONTINUE_DEBUG_EVENT& ack)
 	return TRUE;
 }
 
-BOOL XDbgProxy::sendDbgEvent(const WAIT_DEBUG_EVENT& event, struct CONTINUE_DEBUG_EVENT& ack)
+BOOL XDbgProxy::sendDbgEvent(const WAIT_DEBUG_EVENT& event, struct CONTINUE_DEBUG_EVENT& ack, bool freeze)
 {
 	BOOL result;
-	suspendThreads(GetCurrentThreadId());
+	if (freeze)
+		suspendThreads(GetCurrentThreadId());
 	if (sendDbgEvent(event))
 		result = recvDbgAck(ack);
 	else
 		result = FALSE;
-	resumeThread(GetCurrentThreadId());
+	if (freeze)
+		resumeThread(GetCurrentThreadId());
 	return result;
 }
 
@@ -549,24 +549,17 @@ BOOL XDbgProxy::DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 	return TRUE;
 }
 
+void XDbgProxy::waitForAttach()
+{
+	while (!_attached) {
+		Sleep(0);
+		MemoryBarrier();
+	}
+}
+
 long XDbgProxy::run()
 {
 	MyTrace("XDBG Thread started");
-
-	while (!_stopFlag) {
-		if (!ConnectNamedPipe(_hPipe, NULL)) {
-			if (GetLastError() ==  ERROR_PIPE_CONNECTED) {
-				break;
-			} else {
-				MyTrace("%s(): ConnectNamedPipe(%p) failed. errCode: %d ", __FUNCTION__, _hPipe, GetLastError());
-				assert(false);
-				return -1;
-			}
-		} else {
-			MyTrace("debugger connected");
-			break;
-		}
-	}
 
 	while (!_stopFlag) {
 
@@ -594,7 +587,7 @@ long XDbgProxy::run()
 				_events.pop_front();
 			} */
 
-			Sleep(100);
+			Sleep(200);
 
 		} else {
 
@@ -609,7 +602,7 @@ long XDbgProxy::run()
 					return -1;
 				}
 
-				Sleep(200);
+				Sleep(100);
 
 			} else {
 				onDbgConnect();
@@ -622,11 +615,70 @@ long XDbgProxy::run()
 	return 0;
 }
 
+void SuspendThreads(DWORD tid)
+{
+	HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+	if (hSnapshot != INVALID_HANDLE_VALUE) {
+		THREADENTRY32 te;
+		te.dwSize = sizeof(te);
+		if (Thread32First(hSnapshot, &te)) {
+			do {
+				if (te.th32OwnerProcessID == GetCurrentProcessId()) {
+
+					if (te.th32ThreadID == tid)
+						continue;
+					HANDLE hThread = OpenThread(THREAD_ALL_ACCESS, FALSE, te.th32ThreadID);
+					SuspendThread(hThread);
+					CloseHandle(hThread);
+				}
+
+				te.dwSize = sizeof(te);
+			} while (Thread32Next(hSnapshot, &te));
+		}
+
+		CloseHandle(hSnapshot);
+	}
+}
+
+void ResumeThreads(DWORD tid)
+{
+	HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+	if (hSnapshot != INVALID_HANDLE_VALUE) {
+		THREADENTRY32 te;
+		te.dwSize = sizeof(te);
+		if (Thread32First(hSnapshot, &te)) {
+			do {
+				if (te.th32OwnerProcessID == GetCurrentProcessId()) {
+
+					if (te.th32ThreadID == tid)
+						continue;
+					HANDLE hThread = OpenThread(THREAD_ALL_ACCESS, FALSE, te.th32ThreadID);
+					ResumeThread(hThread);
+					CloseHandle(hThread);
+				}
+
+				te.dwSize = sizeof(te);
+			} while (Thread32Next(hSnapshot, &te));
+		}
+
+		CloseHandle(hSnapshot);
+	}
+}
+
 void XDbgProxy::onDbgConnect()
 {
+	SuspendThreads(GetCurrentThreadId());
+
+	WAIT_DEBUG_EVENT event;
+	CONTINUE_DEBUG_EVENT ack;
+	event.event.dwProcessId = GetCurrentProcessId();
+	event.event.dwThreadId = GetCurrentThreadId();
+	event.event.dwDebugEventCode = ATTACHED_EVENT;
+	sendDbgEvent(event, ack, false);
 	sendProcessInfo();
 	sendThreadInfo();
 	sendModuleInfo();
+	ResumeThreads(GetCurrentThreadId());
 }
 
 void XDbgProxy::onDbgDisconnect()
@@ -642,6 +694,9 @@ void XDbgProxy::sendProcessInfo()
 	CONTINUE_DEBUG_EVENT ack;
 	msg.dwProcessId = GetCurrentProcessId();
 	msg.dwThreadId = _mainThreadId;
+
+	char modName[MAX_PATH + 1];
+
 	memset(&msg.u.CreateProcessInfo, 0, sizeof(msg.u.CreateProcessInfo));
 	msg.dwDebugEventCode = CREATE_PROCESS_DEBUG_EVENT;
 	msg.u.CreateProcessInfo.dwDebugInfoFileOffset = 0;
@@ -650,11 +705,13 @@ void XDbgProxy::sendProcessInfo()
 	msg.u.CreateProcessInfo.hProcess = NULL;
 	msg.u.CreateProcessInfo.hThread = NULL;
 	msg.u.CreateProcessInfo.lpBaseOfImage = (PVOID )GetModuleHandle(NULL);
-	msg.u.CreateProcessInfo.lpImageName = NULL;
+	GetModuleFileName(GetModuleHandle(NULL), modName, MAX_PATH);
+	msg.u.CreateProcessInfo.lpImageName = modName;
 	msg.u.CreateProcessInfo.lpStartAddress = (LPTHREAD_START_ROUTINE)GetThreadStartAddress(_mainThreadId);
+	MyTrace("%s(): main thread start at: %p", __FUNCTION__, msg.u.CreateProcessInfo.lpStartAddress);
 	msg.u.CreateProcessInfo.lpThreadLocalBase = _mainThreadTeb;
 	msg.u.CreateProcessInfo.nDebugInfoSize = 0;
-	sendDbgEvent(event, ack);
+	sendDbgEvent(event, ack, false);
 }
 
 void XDbgProxy::sendModuleInfo()
@@ -665,6 +722,22 @@ void XDbgProxy::sendModuleInfo()
 	DEBUG_EVENT& msg = event.event;
 	CONTINUE_DEBUG_EVENT ack;
 
+	msg.dwDebugEventCode = LOAD_DLL_DEBUG_EVENT;
+	msg.dwProcessId = GetCurrentProcessId();
+	msg.dwThreadId = _mainThreadId;
+
+	char modName[MAX_PATH + 1];
+
+	HMODULE hMainModule = GetModuleHandle(NULL);
+	/*msg.u.LoadDll.dwDebugInfoFileOffset = 0;
+	msg.u.LoadDll.fUnicode = 0;
+	msg.u.LoadDll.hFile = NULL;
+	msg.u.LoadDll.lpBaseOfDll = hMainModule;
+	GetModuleFileName(hMainModule, modName, MAX_PATH);
+	msg.u.LoadDll.lpImageName = modName;
+	sendDbgEvent(event, ack);
+	MyTrace("%s(): module: %s, %p", __FUNCTION__, modName, msg.u.LoadDll.lpBaseOfDll);*/
+
 	HMODULE hModules[512];
 	DWORD len;
 	if (!EnumProcessModules(GetCurrentProcess(), hModules, sizeof(hModules), &len)) {
@@ -673,23 +746,21 @@ void XDbgProxy::sendModuleInfo()
 		return;
 	}
 
-	msg.dwDebugEventCode = LOAD_DLL_DEBUG_EVENT;
-	msg.dwProcessId = GetCurrentProcessId();
-	msg.dwThreadId = _mainThreadId;
-
-	char modName[MAX_PATH + 1];
-
 	len /= sizeof(HMODULE);
 	MyTrace("%s(): module count: %d", __FUNCTION__, len);
 
 	for (DWORD i = 0; i < len; i++) {
+		if (hMainModule == hModules[i])
+			continue;
+
 		msg.u.LoadDll.dwDebugInfoFileOffset = 0;
 		msg.u.LoadDll.fUnicode = 0;
 		msg.u.LoadDll.hFile = NULL;
 		msg.u.LoadDll.lpBaseOfDll = hModules[i];
 		GetModuleFileName(hModules[i], modName, MAX_PATH);
 		msg.u.LoadDll.lpImageName = modName;
-		sendDbgEvent(event, ack);
+		sendDbgEvent(event, ack, false);
+		MyTrace("%s(): module: %s, %p", __FUNCTION__, modName, msg.u.LoadDll.lpBaseOfDll);
 	}
 }
 
@@ -719,7 +790,7 @@ void XDbgProxy::sendThreadInfo()
 					msg.u.CreateThread.lpStartAddress = (LPTHREAD_START_ROUTINE)GetThreadStartAddress(GetCurrentThread());
 					msg.u.CreateThread.lpThreadLocalBase = GetThreadTeb(te.th32ThreadID);
 					addThread(te.th32ThreadID);
-					sendDbgEvent(event, ack);
+					sendDbgEvent(event, ack, false);
 				}
 
 				te.dwSize = sizeof(te);

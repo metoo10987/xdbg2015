@@ -40,6 +40,14 @@ bool XDbgController::attach(DWORD pid)
 		return false;
 	}
 
+	DEBUG_EVENT event;
+	if (!waitEvent(&event))  {
+		assert(false);
+		return false;
+	}
+
+	assert(event.dwDebugEventCode == ATTACHED_EVENT);
+	continueEvent(event.dwProcessId, event.dwThreadId, DBG_CONTINUE);
 	return true;
 }
 
@@ -83,12 +91,13 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 			GetModuleFileNameEx(_hProcess, (HMODULE)lpDebugEvent->u.CreateProcessInfo.lpBaseOfImage, 
 				fileName, MAX_PATH);
 			lpDebugEvent->u.CreateProcessInfo.hProcess = _hProcess;
-			lpDebugEvent->u.CreateProcessInfo.hThread = OpenThread(THREAD_ALL_ACCESS, FALSE, lpDebugEvent->dwThreadId);
+			lpDebugEvent->u.CreateProcessInfo.hThread = OpenThread(THREAD_ALL_ACCESS, FALSE, 
+				lpDebugEvent->dwThreadId);
 			MyTrace("%s(): threadId: %d, threadHandle: %x", __FUNCTION__, lpDebugEvent->dwThreadId, 
 				lpDebugEvent->u.CreateProcessInfo.hThread);
 			assert(lpDebugEvent->u.CreateProcessInfo.hThread);
-			lpDebugEvent->u.CreateProcessInfo.hFile = CreateFile(fileName, GENERIC_READ, FILE_SHARE_READ, NULL, 
-				OPEN_EXISTING, 0, NULL);
+			lpDebugEvent->u.CreateProcessInfo.hFile = CreateFile(fileName, GENERIC_READ, FILE_SHARE_READ, 
+				NULL, OPEN_EXISTING, 0, NULL);
 			assert(lpDebugEvent->u.CreateProcessInfo.hFile != INVALID_HANDLE_VALUE);
 
 			MyTrace("%s(): CREATE_PROCESS_DEBUG_EVENT: hFile = %x, hProcess = %x, hThread = %x", 

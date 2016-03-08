@@ -37,6 +37,8 @@ BOOL APIENTRY DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 				assert(false);
 			}
 
+			// XDbgProxy::instance().waitForAttach();
+
 		} else if (mode == 1) {
 			MyTrace("xdbgcore initializing. mode: 1");
 			if (!initializeDebugger()) {
@@ -125,8 +127,7 @@ BOOL __stdcall Mine_CreateProcessA(LPCSTR a0,
 			dbgctl->attach(a9->dwProcessId);
 
 		if ((flags & CREATE_SUSPENDED) == 0) {
-			if (dbgctl)
-				ResumeThread(a9->hThread);
+			ResumeThread(a9->hThread);
 		}
 	}
 
@@ -159,7 +160,6 @@ BOOL __stdcall Mine_CreateProcessW(LPCWSTR a0,
 		dwCreationFlags |= CREATE_SUSPENDED;
 	}
 
-
 	if (!Real_CreateProcessW(a0, a1, a2, a3, a4, dwCreationFlags, a6, a7, a8, a9)){
 		return FALSE;
 	}
@@ -169,8 +169,7 @@ BOOL __stdcall Mine_CreateProcessW(LPCWSTR a0,
 			dbgctl->attach(a9->dwProcessId);
 
 		if ((flags & CREATE_SUSPENDED) == 0) {
-			if (dbgctl)
-				ResumeThread(a9->hThread);
+			ResumeThread(a9->hThread);
 		}
 	}
 

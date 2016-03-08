@@ -21,6 +21,13 @@ public:
 		return inst;
 	}
 
+	bool isAttached() const
+	{
+		return _attached;
+	}
+
+	void waitForAttach();
+
 	BOOL DllMain(HANDLE hModule, DWORD ul_reason_for_call, LPVOID lpReserved);
 
 	// TODO: Implement LOAD_DLL_DEBUG_EVENT, UNLOAD_DLL_DEBUG_EVENT By:
@@ -41,7 +48,7 @@ protected:
 
 	BOOL sendDbgEvent(const WAIT_DEBUG_EVENT& event);
 	BOOL recvDbgAck(struct CONTINUE_DEBUG_EVENT& ack);
-	BOOL sendDbgEvent(const WAIT_DEBUG_EVENT& event, struct CONTINUE_DEBUG_EVENT& ack);
+	BOOL sendDbgEvent(const WAIT_DEBUG_EVENT& event, struct CONTINUE_DEBUG_EVENT& ack, bool freeze = true);
 
 	void postDbgEvent(const WAIT_DEBUG_EVENT& event);
 
@@ -60,7 +67,7 @@ protected:
 
 protected:
 	HANDLE					_hPipe;
-	bool					_attached;
+	volatile bool			_attached;
 	EXCEPTION_RECORD*		_lastException;
 	ULONG					_lastExceptCode;
 	PVOID					_lastExceptAddr;
