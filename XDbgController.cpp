@@ -27,8 +27,9 @@ bool XDbgController::attach(DWORD pid)
 {
 	MyTrace("%s()", __FUNCTION__);
 	std::string name = makePipeName(pid);
+	// WaitNamedPipe(name.c_str(), NMPWAIT_WAIT_FOREVER);
 	_hPipe = CreateFile(name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
-	if (_hPipe == NULL) {
+	if (_hPipe == INVALID_HANDLE_VALUE) {
 		MyTrace("%s() cannot connect to '%s'", __FUNCTION__, name.c_str());
 		return false;
 	}

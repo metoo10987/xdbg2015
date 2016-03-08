@@ -488,6 +488,8 @@ DWORD GetProcessMainThread(DWORD dwProcID)
 // SO, THIS MODULE MUST BE A DLL
 BOOL XDbgProxy::DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 {
+	MyTrace("%s()", __FUNCTION__);
+
 	WAIT_DEBUG_EVENT event;
 	DEBUG_EVENT& msg = event.event;
 	CONTINUE_DEBUG_EVENT ack;

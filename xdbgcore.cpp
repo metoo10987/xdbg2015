@@ -102,16 +102,20 @@ BOOL __stdcall Mine_CreateProcessA(LPCSTR a0,
                                    LPSTARTUPINFOA a8,
                                    LPPROCESS_INFORMATION a9)
 {
-	MyTrace("%s", __FUNCTION__);
+	MyTrace("%s()", __FUNCTION__);
 	DWORD flags = dwCreationFlags;
 	if (dbgctl) {
 		if (DEBUG_PROCESS & dwCreationFlags) {
 			dwCreationFlags &= ~DEBUG_PROCESS;
 		}
 
+		if (DEBUG_ONLY_THIS_PROCESS & dwCreationFlags)
+			dwCreationFlags &= ~DEBUG_ONLY_THIS_PROCESS;
+
 		dwCreationFlags |= CREATE_SUSPENDED;
 	}
 
+	
 	if (!Real_CreateProcessA(a0, a1, a2, a3, a4, dwCreationFlags, a6, a7, a8, a9)){
 		return FALSE;
 	}
@@ -120,14 +124,16 @@ BOOL __stdcall Mine_CreateProcessA(LPCSTR a0,
 		if (injectDll(a9->dwProcessId))
 			dbgctl->attach(a9->dwProcessId);
 
-		if ((dwCreationFlags & CREATE_SUSPENDED) == 0) {
-			ResumeThread(a9->hThread);
+		if ((flags & CREATE_SUSPENDED) == 0) {
+			if (dbgctl)
+				ResumeThread(a9->hThread);
 		}
 	}
 
-
 	return TRUE;
 }
+
+#include "detours.h"
 
 BOOL __stdcall Mine_CreateProcessW(LPCWSTR a0,
                                    LPWSTR a1,
@@ -147,8 +153,12 @@ BOOL __stdcall Mine_CreateProcessW(LPCWSTR a0,
 			dwCreationFlags &= ~DEBUG_PROCESS;
 		}
 
+		if (DEBUG_ONLY_THIS_PROCESS & dwCreationFlags)
+			dwCreationFlags &= ~DEBUG_ONLY_THIS_PROCESS;
+
 		dwCreationFlags |= CREATE_SUSPENDED;
 	}
+
 
 	if (!Real_CreateProcessW(a0, a1, a2, a3, a4, dwCreationFlags, a6, a7, a8, a9)){
 		return FALSE;
@@ -158,11 +168,11 @@ BOOL __stdcall Mine_CreateProcessW(LPCWSTR a0,
 		if (injectDll(a9->dwProcessId))
 			dbgctl->attach(a9->dwProcessId);
 
-		if ((dwCreationFlags & CREATE_SUSPENDED) == 0) {
-			ResumeThread(a9->hThread);
+		if ((flags & CREATE_SUSPENDED) == 0) {
+			if (dbgctl)
+				ResumeThread(a9->hThread);
 		}
 	}
-
 
 	return TRUE;
 }
