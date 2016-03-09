@@ -71,7 +71,12 @@ extern BOOL(__stdcall * Real_GetThreadContext)(HANDLE a0,
 bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 {
 	MyTrace("%s()", __FUNCTION__);
-	assert(dwMilliseconds == INFINITE); // no timeout
+	// assert(dwMilliseconds == INFINITE); // no timeout
+	if (dwMilliseconds != INFINITE) {
+		if (WaitForSingleObject(_hPipe, dwMilliseconds) != WAIT_OBJECT_0)
+			return false;
+	}
+
 	DWORD len;
 	if (!ReadFile(_hPipe, &_event, sizeof(_event), &len, NULL)) {
 		MyTrace("%s(): read pipe failed, pipe: %p", __FUNCTION__, _hPipe);
