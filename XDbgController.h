@@ -42,14 +42,39 @@ public:
 		return _pc;
 	}
 
-	void setFlags(ULONG flags)
+	void setMask(ULONG mask)
 	{
-		_flags = flags;
+		_mask |= mask;
 	}
 
-	ULONG getFlags() const
+	void clearMask(ULONG mask)
 	{
-		return _flags;
+		_mask &= ~mask;
+	}
+
+	ULONG getMask() const
+	{
+		return _mask;
+	}
+
+	void setEFlags(ULONG flags)
+	{
+		_eflags = flags;
+	}
+
+	ULONG getEFlags() const
+	{
+		return _eflags;
+	}
+
+	void setDbgRegs(const DbgRegs& dbgRegs)
+	{
+		_dbgRegs = dbgRegs;
+	}
+
+	const DbgRegs& getDbgRegs() const
+	{
+		return _dbgRegs;
 	}
 
 protected:
@@ -60,7 +85,9 @@ protected:
 	ULONG		_exceptAddr;
 	ULONG		_exceptCode;
 	CONTEXT&	_lastContext;
+	ULONG		_mask;
 	ULONG		_pc;
-	ULONG		_flags;
+	ULONG		_eflags;
+	DbgRegs		_dbgRegs;
 	WAIT_DEBUG_EVENT	_event;
 };

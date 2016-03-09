@@ -22,19 +22,42 @@ static inline std::string makePipeName(DWORD pid)
 	return buf;
 }
 
-#define CDE_SINGLE_STEP		1
+// #define CDE_SINGLE_STEP		1
+// #define CDE_DEBUG_REG		2
 
 struct WAIT_DEBUG_EVENT {
 	DEBUG_EVENT		event;
 	CONTEXT			ctx;
 };
 
+struct DbgRegs {
+	ULONG	Dr0;
+	ULONG	Dr1;
+	ULONG	Dr2;
+	ULONG	Dr3;
+	ULONG	Dr6;
+	ULONG	Dr7;
+};
+
+template <typename T1, typename T2>
+inline void copyDbgRegs(T1& dest, const T2& src)
+{
+	dest.Dr0 = src.Dr0;
+	dest.Dr1 = src.Dr1;
+	dest.Dr2 = src.Dr2;
+	dest.Dr3 = src.Dr3;
+	dest.Dr6 = src.Dr6;
+	dest.Dr7 = src.Dr7;
+}
+
 struct CONTINUE_DEBUG_EVENT {
 	DWORD	dwProcessId;
 	DWORD	dwThreadId;
 	DWORD	dwContinueStatus;
+	ULONG	mask;
 	ULONG	newpc;
-	ULONG	flags;
+	ULONG	eflags;
+	DbgRegs dbgRegs;
 };
 
 void MyTrace(LPCSTR fmt, ...);

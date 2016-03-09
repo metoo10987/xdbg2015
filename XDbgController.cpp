@@ -8,7 +8,8 @@ XDbgController::XDbgController(void) : _lastContext(_event.ctx)
 {
 	_hPipe = INVALID_HANDLE_VALUE;
 	_pc = 0;
-	_flags = 0;
+	_mask = 0;
+	_eflags = 0;
 	_exceptAddr = 0;
 	_exceptCode = 0;
 	_hProcess = NULL;
@@ -80,7 +81,8 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 		_lastContext.Eip, lpDebugEvent->dwDebugEventCode);
 
 	_pc = 0;
-	_flags = 0;
+	_mask = 0;
+	_eflags = 0;
 	_exceptAddr = 0;
 	_exceptCode = 0;
 
@@ -178,15 +180,18 @@ bool XDbgController::continueEvent(DWORD dwProcessId, DWORD dwThreadId, DWORD dw
 	ack.dwProcessId = dwProcessId;
 	ack.dwThreadId = dwThreadId;
 	ack.dwContinueStatus = dwContinueStatus;
+	ack.mask = _mask;
 	ack.newpc = _pc;
-	ack.flags = _flags;
+	ack.eflags = _eflags;
+	copyDbgRegs(ack.dbgRegs, _dbgRegs);
 	DWORD len;
 	if (!WriteFile(_hPipe, &ack, sizeof(ack), &len, NULL)) {
 		return false;
 	}
 
+	_mask = 0;
 	_pc = 0;
-	_flags = 0;
+	_eflags = 0;
 	_exceptAddr = 0;
 	_exceptCode = 0;
 

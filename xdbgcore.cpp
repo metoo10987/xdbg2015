@@ -296,19 +296,32 @@ BOOL __stdcall Mine_SetThreadContext(HANDLE a0,
 	MyTrace("%s(%p, %p)", __FUNCTION__, a0, a1);
 	if (dbgctl != NULL) {
 
-		if (a1->ContextFlags & CONTEXT_CONTROL) {
-
+		if ((a1->ContextFlags & CONTEXT_CONTROL) == CONTEXT_CONTROL) {
+			dbgctl->setMask(CONTEXT_CONTROL);
 			MyTrace("%s(): new pc: %x", __FUNCTION__, a1->Eip);
 			dbgctl->setPC(a1->Eip);
 			a1->Eip = dbgctl->getLastPc();
 			MyTrace("%s(): modified pc: %x", __FUNCTION__, a1->Eip);
+			dbgctl->setEFlags(a1->EFlags);
+
 			if (a1->EFlags & SINGLE_STEP_FLAG) {
-				dbgctl->setFlags(CDE_SINGLE_STEP);
 				a1->EFlags &= ~SINGLE_STEP_FLAG;
 				MyTrace("%s(): single trip toggled", __FUNCTION__);
 			} else {
-				dbgctl->setFlags(0);
 				MyTrace("%s(): single trip cleared", __FUNCTION__);
+			}
+		}
+
+		if ((a1->ContextFlags & CONTEXT_DEBUG_REGISTERS) == CONTEXT_DEBUG_REGISTERS) {
+
+			MyTrace("%s(): debug registers setted", __FUNCTION__);
+			if (dbgctl->getExceptCode() != 0) {
+				dbgctl->setMask(CONTEXT_DEBUG_REGISTERS);
+				DbgRegs dbgRegs;
+				copyDbgRegs(dbgRegs, *a1);
+				dbgctl->setDbgRegs(dbgRegs);
+				a1->ContextFlags &= ~CONTEXT_DEBUG_REGISTERS;
+				MyTrace("%s(): debug registers cached", __FUNCTION__);
 			}
 		}
 
@@ -326,23 +339,36 @@ BOOL __stdcall Mine_GetThreadContext(HANDLE a0,
 		BOOL result = Real_GetThreadContext(a0, a1);
 		if (!result)
 			return result;
-		if (a1->ContextFlags & CONTEXT_CONTROL) {
-			if (dbgctl->getPC())
+		if ((a1->ContextFlags & CONTEXT_CONTROL) == CONTEXT_CONTROL) {
+			if ((dbgctl->getMask() & CONTEXT_CONTROL) == CONTEXT_CONTROL) {
 				a1->Eip = dbgctl->getPC();
-			else if (dbgctl->getExceptPc())
+			} else if (dbgctl->getExceptPc()) {
 				if (dbgctl->getExceptCode() == STATUS_BREAKPOINT)
 					CTX_PC_REG(a1) = (DWORD)dbgctl->getExceptPc() + 1;
 				else
 					CTX_PC_REG(a1) = (DWORD)dbgctl->getExceptPc();
+			}
+
+			a1->EFlags = dbgctl->getEFlags();
 
 			/* if (dbgctl->getExceptCode() == STATUS_BREAKPOINT) {
 				a1->Eip += 1;
 			} */
 
 			// MyTrace("%s(%p, %p). pc = %p", __FUNCTION__, a0, a1, a1->Eip);
-			if (dbgctl->getFlags()) {
+			/*if (dbgctl->getFlags() & CDE_SINGLE_STEP) {
 				a1->EFlags |= SINGLE_STEP_FLAG;
 				// MyTrace("%s(%p, %p). SINGLE_STEP_FLAG was setted", __FUNCTION__, a0, a1);
+			} */
+
+			/* if (dbgctl->getFlags() & CDE_DEBUG_REG) {
+				copyDbgRegs(*a1, dbgctl->getDbgRegs());
+			} */
+		}
+
+		if ((a1->ContextFlags & CONTEXT_DEBUG_REGISTERS) == CONTEXT_DEBUG_REGISTERS) {
+			if ((dbgctl->getMask() & CONTEXT_DEBUG_REGISTERS) == CONTEXT_DEBUG_REGISTERS) {
+				copyDbgRegs(*a1, dbgctl->getDbgRegs());
 			}
 		}
 

@@ -210,7 +210,7 @@ bool XDbgProxy::initialize()
 	return true;
 }
 
-static inline void copyDbgRegs(CONTEXT* dest, const CONTEXT* src)
+/* static inline void copyDbgRegs(CONTEXT* dest, const CONTEXT* src)
 {
 	dest->Dr0 = src->Dr0;
 	dest->Dr1 = src->Dr1;
@@ -218,7 +218,7 @@ static inline void copyDbgRegs(CONTEXT* dest, const CONTEXT* src)
 	dest->Dr3 = src->Dr3;
 	dest->Dr6 = src->Dr6;
 	dest->Dr7 = src->Dr7;
-}
+} */
 
 #define DBG_PRINTEXCEPTION_WIDE_C		(0x4001000AL)
 
@@ -290,7 +290,11 @@ LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 		return EXCEPTION_CONTINUE_SEARCH;
 	}
 
-	if (ExceptionInfo->ExceptionRecord->ExceptionCode == STATUS_BREAKPOINT) {
+	if (ack.mask & CONTEXT_CONTROL) {
+		ExceptionInfo->ContextRecord->ContextFlags |= CONTEXT_CONTROL;
+		CTX_PC_REG(ExceptionInfo->ContextRecord) = ack.newpc;
+		ExceptionInfo->ContextRecord->EFlags = ack.eflags;
+	} else if (ExceptionInfo->ExceptionRecord->ExceptionCode == STATUS_BREAKPOINT) {
 
 		// FIXME: 可能需要 HOOK SetThreadContext() / GetThreadContext()
 		// TitanEngine 中是怎么处理自动跳到下一个指令的，有待研究
@@ -298,35 +302,27 @@ LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 		//		这可能是调试器设置的单步标志无效的原因
 		// *** 正常的调试流程， STATUS_BREAKPOINT 异常调试器返回 DBG_CONTINUE 时，会从下一次指令执行
 
-		if (ack.newpc) {
-			CTX_PC_REG(ExceptionInfo->ContextRecord) = ack.newpc;
-		} else {
-
-			if (ack.dwContinueStatus == DBG_CONTINUE) {
-				CTX_PC_REG(ExceptionInfo->ContextRecord) += 1;
-			}
-		}
-
-		if (ack.flags & CDE_SINGLE_STEP) {
-			ExceptionInfo->ContextRecord->EFlags |= SINGLE_STEP_FLAG; // single step
-		} else {
-			ExceptionInfo->ContextRecord->EFlags &= ~SINGLE_STEP_FLAG;
+		if (ack.dwContinueStatus == DBG_CONTINUE) {
+			CTX_PC_REG(ExceptionInfo->ContextRecord) += 1;
 		}
 	}
 
-	if (ExceptionInfo->ExceptionRecord->ExceptionCode == STATUS_SINGLE_STEP) {
-
-		if (ack.newpc) {
-			CTX_PC_REG(ExceptionInfo->ContextRecord) = ack.newpc;
-		}
-
-		if (ack.flags & CDE_SINGLE_STEP) {
-			ExceptionInfo->ContextRecord->EFlags |= SINGLE_STEP_FLAG; // single step
-		}
-		else {
-			ExceptionInfo->ContextRecord->EFlags &= ~SINGLE_STEP_FLAG;
-		}
+	if ((ack.mask & CONTEXT_DEBUG_REGISTERS) == CONTEXT_DEBUG_REGISTERS) {
+		ExceptionInfo->ContextRecord->ContextFlags |= CONTEXT_DEBUG_REGISTERS;
+		copyDbgRegs(*ExceptionInfo->ContextRecord, ack.dbgRegs);
 	}
+
+	/*
+	if (ack.flags & CDE_SINGLE_STEP) {
+		ExceptionInfo->ContextRecord->EFlags |= SINGLE_STEP_FLAG; // single step
+	}
+	else {
+		ExceptionInfo->ContextRecord->EFlags &= ~SINGLE_STEP_FLAG;
+	}*/
+
+	/* if (ack.flags & CDE_DEBUG_REG) {
+		copyDbgRegs(*ExceptionInfo->ContextRecord, ack.dbgRegs);
+	} */
 
 	/* CONTEXT ctx;
 	ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS | CONTEXT_CONTROL;
