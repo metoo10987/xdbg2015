@@ -52,6 +52,19 @@ bool XDbgController::attach(DWORD pid)
 	return true;
 }
 
+bool XDbgController::stop(DWORD pid)
+{
+	if (_hProcess == NULL)
+		return false;
+
+	CloseHandle(_hProcess);
+	_hProcess = NULL;
+	CloseHandle(_hPipe);
+	_hPipe = NULL;
+	memset(&_lastContext, 0, sizeof(_lastContext));
+	return true;
+}
+
 extern BOOL(__stdcall * Real_GetThreadContext)(HANDLE a0,
 	LPCONTEXT a1);
 

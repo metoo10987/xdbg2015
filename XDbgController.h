@@ -9,6 +9,7 @@ public:
 	~XDbgController(void);
 
 	bool attach(DWORD pid);
+	bool stop(DWORD pid);
 	bool waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds = INFINITE);
 	bool continueEvent(DWORD dwProcessId, DWORD dwThreadId, DWORD dwContinueStatus);
 
