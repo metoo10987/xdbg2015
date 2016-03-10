@@ -91,6 +91,7 @@ protected:
 
 protected:
 	HANDLE		_hPipe;
+	// HANDLE		_hEvent;
 	HANDLE		_hProcess;
 	ULONG		_exceptAddr;
 	ULONG		_exceptCode;

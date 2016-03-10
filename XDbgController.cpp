@@ -7,6 +7,7 @@
 XDbgController::XDbgController(void) : _lastContext(_event.ctx)
 {
 	_hPipe = INVALID_HANDLE_VALUE;
+	// _hEvent = NULL;
 	_pc = 0;
 	_mask = 0;
 	_eflags = 0;
@@ -20,7 +21,8 @@ XDbgController::~XDbgController(void)
 {
 	if (_hPipe != INVALID_HANDLE_VALUE)
 		CloseHandle(_hPipe);
-
+	/* if (_hEvent)
+		CloseHandle(_hEvent); */
 }
 
 bool XDbgController::attach(DWORD pid)
@@ -28,11 +30,19 @@ bool XDbgController::attach(DWORD pid)
 	MyTrace("%s()", __FUNCTION__);
 	std::string name = makePipeName(pid);
 	// WaitNamedPipe(name.c_str(), NMPWAIT_WAIT_FOREVER);
-	_hPipe = CreateFile(name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+	_hPipe = CreateFile(name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 
+		FILE_FLAG_OVERLAPPED, NULL);
+
 	if (_hPipe == INVALID_HANDLE_VALUE) {
 		MyTrace("%s() cannot connect to '%s'", __FUNCTION__, name.c_str());
 		return false;
 	}
+
+	/* _hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+	if (_hEvent == NULL) {
+		MyTrace("%s() cannot create event", __FUNCTION__);
+		return false;
+	} */
 
 	_hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
 	if (_hProcess == NULL ){
@@ -60,6 +70,8 @@ bool XDbgController::stop(DWORD pid)
 	_hProcess = NULL;
 	CloseHandle(_hPipe);
 	_hPipe = NULL;
+	// CloseHandle(_hEvent);
+	// _hEvent = NULL;
 	memset(&_lastContext, 0, sizeof(_lastContext));
 	return true;
 }
@@ -130,6 +142,7 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 {
 	MyTrace("%s()", __FUNCTION__);
 	// assert(dwMilliseconds == INFINITE); // no timeout
+#if 0
 	if (dwMilliseconds != INFINITE) {
 
 		// NO IMPL
@@ -138,11 +151,24 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 		assert(false);
 		return false;
 	}
-
+#endif
+	OVERLAPPED overlap;
+	memset(&overlap, 0, sizeof(overlap));
+	// overlap.hEvent = _hEvent;
 	DWORD len;
-	if (!ReadFile(_hPipe, &_event, sizeof(_event), &len, NULL)) {
-		MyTrace("%s(): read pipe failed, pipe: %p", __FUNCTION__, _hPipe);
-		return false;
+	if (!ReadFile(_hPipe, &_event, sizeof(_event), &len, &overlap)) {
+		if (GetLastError() == ERROR_IO_PENDING) {
+			if (WaitForSingleObject(_hPipe, dwMilliseconds) != WAIT_OBJECT_0)
+				return false;
+			DWORD numread;
+			if (!GetOverlappedResult(_hPipe, &overlap, &numread, FALSE)) {
+				assert(false);
+				return false;
+			}
+		} else {
+			MyTrace("%s(): read pipe failed, pipe: %p", __FUNCTION__, _hPipe);
+			return false;
+		}
 	}
 
 	*lpDebugEvent = _event.event;
