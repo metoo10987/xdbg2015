@@ -173,15 +173,30 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 	// overlap.hEvent = _hEvent;
 	
 	if (_pending) {
-		if (WaitForSingleObject(_hPipe, dwMilliseconds) != WAIT_OBJECT_0)
+		DWORD waitResult = WaitForSingleObject(_hPipe, dwMilliseconds);
+
+		if (waitResult == WAIT_FAILED) {
+			_pending = false;
 			return false;
+
+		} else if (waitResult == WAIT_TIMEOUT) {
+
+			SetLastError(ERROR_SEM_TIMEOUT);
+			return false;
+		} else if (waitResult == WAIT_OBJECT_0) {
+			_pending = false;
+		} else {
+			_pending = false;
+			return false;
+		}
+
 		/* DWORD numread;
 		if (!GetOverlappedResult(_hPipe, &_overlap, &numread, FALSE)) {
 			assert(false);
 			return false;
 		} */
 
-		_pending = false;
+		
 	} 
 
 	*lpDebugEvent = _event.event;
