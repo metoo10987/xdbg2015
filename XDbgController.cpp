@@ -7,7 +7,7 @@
 XDbgController::XDbgController(void) : _lastContext(_event.ctx)
 {
 	_hPipe = INVALID_HANDLE_VALUE;
-	// _hEvent = NULL;
+	_hEvent = NULL;
 	_pending = false;
 	_pc = 0;
 	_mask = 0;
@@ -22,8 +22,8 @@ XDbgController::~XDbgController(void)
 {
 	if (_hPipe != INVALID_HANDLE_VALUE)
 		CloseHandle(_hPipe);
-	/* if (_hEvent)
-		CloseHandle(_hEvent); */
+	if (_hEvent)
+		CloseHandle(_hEvent);
 }
 
 bool XDbgController::attach(DWORD pid)
@@ -39,11 +39,11 @@ bool XDbgController::attach(DWORD pid)
 		return false;
 	}
 
-	/* _hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+	_hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 	if (_hEvent == NULL) {
 		MyTrace("%s() cannot create event", __FUNCTION__);
 		return false;
-	} */
+	}
 
 	_hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
 	if (_hProcess == NULL ){
@@ -71,8 +71,8 @@ bool XDbgController::stop(DWORD pid)
 	_hProcess = NULL;
 	CloseHandle(_hPipe);
 	_hPipe = NULL;
-	// CloseHandle(_hEvent);
-	// _hEvent = NULL;
+	CloseHandle(_hEvent);
+	_hEvent = NULL;
 	memset(&_lastContext, 0, sizeof(_lastContext));
 	return true;
 }
@@ -157,7 +157,9 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 	DWORD len;
 
 	if (!_pending) {
+		ResetEvent(_hEvent);
 		memset(&_overlap, 0, sizeof(_overlap));
+		_overlap.hEvent = _hEvent;
 		if (ReadFile(_hPipe, &_event, sizeof(_event), &len, &_overlap))
 			_pending = false;
 		else
@@ -170,10 +172,8 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 			}
 	}
 
-	// overlap.hEvent = _hEvent;
-	
 	if (_pending) {
-		DWORD waitResult = WaitForSingleObject(_hPipe, dwMilliseconds);
+		DWORD waitResult = WaitForSingleObject(_hEvent, dwMilliseconds);
 
 		if (waitResult == WAIT_FAILED) {
 			_pending = false;
