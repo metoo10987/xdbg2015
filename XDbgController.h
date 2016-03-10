@@ -33,6 +33,11 @@ public:
 		return _lastContext.Eip;
 	}
 
+	const CONTEXT& getLastContext() const
+	{
+		return _lastContext;
+	}
+
 	void setPC(ULONG pc)
 	{
 		_pc = pc;
@@ -78,7 +83,11 @@ public:
 		return _dbgRegs;
 	}
 
+	void setThreadContext(HANDLE hThread, const CONTEXT* ctx);
+	void getThreadContext(HANDLE hThread, CONTEXT* ctx);
+
 protected:
+	void cloneThreadContext(CONTEXT* dest, const CONTEXT* src, DWORD ContextFlags);
 
 protected:
 	HANDLE		_hPipe;

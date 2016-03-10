@@ -14,3 +14,4 @@ DWORD WINAPI XDbgGetCurrentThreadId();
 DWORD WINAPI XDbgSuspendThread(IN HANDLE hThread);
 DWORD WINAPI XDbgResumeThread(IN HANDLE hThread);
 HANDLE WINAPI XDbgGetCurrentProcess();
+BOOL WINAPI XDbgCloseHandle(HANDLE hObj);

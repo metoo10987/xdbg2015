@@ -21,7 +21,7 @@ XDbgProxy::XDbgProxy(void)
 XDbgProxy::~XDbgProxy(void)
 {
 	if (_hPipe != INVALID_HANDLE_VALUE)
-		CloseHandle(_hPipe);
+		XDbgCloseHandle(_hPipe);
 }
 
 BOOL XDbgProxy::sendDbgEvent(const WAIT_DEBUG_EVENT& event)
@@ -383,7 +383,7 @@ PVOID WINAPI GetThreadStartAddress(HANDLE hThread)
 	
 	UINT32 ThreadQuerySetWin32StartAddress = 9;
     ntStatus = NtQueryInformationThread(hDupHandle, ThreadQuerySetWin32StartAddress, &dwStartAddress, sizeof(PVOID), NULL);
-    CloseHandle(hDupHandle);
+    XDbgCloseHandle(hDupHandle);
 	if (ntStatus != 0) {
 		MyTrace("%s(): NtQueryInformationThread() failed. status: %x", __FUNCTION__, ntStatus);
 		return 0;
@@ -396,7 +396,7 @@ PVOID WINAPI GetThreadStartAddress(DWORD tid)
 {
 	HANDLE hThread = OpenThread(THREAD_ALL_ACCESS, FALSE, tid);
 	PVOID addr = GetThreadStartAddress(hThread);
-	CloseHandle(hThread);
+	XDbgCloseHandle(hThread);
 	return addr;
 }
 
@@ -434,7 +434,7 @@ _TEB* GetThreadTeb(DWORD tid)
 	UINT32 ThreadBasicInformation = 0;
 	THREAD_BASIC_INFORMATION bi;
 	ntStatus = NtQueryInformationThread(hThread, ThreadBasicInformation, &bi, sizeof(bi), NULL);
-	CloseHandle(hThread);
+	XDbgCloseHandle(hThread);
 	if (ntStatus != 0)
 		return 0;
 
@@ -475,12 +475,12 @@ DWORD GetProcessMainThread(DWORD dwProcID)
 							dwMainThreadID = th32.th32ThreadID; // let it be main... :)
 						}
 					}
-					CloseHandle(hThread);
+					XDbgCloseHandle(hThread);
 				}
 			}
 		}
 
-		CloseHandle(hThreadSnap);
+		XDbgCloseHandle(hThreadSnap);
 	}
 
 	return (dwMainThreadID);
@@ -630,14 +630,14 @@ void SuspendThreads(DWORD tid)
 						continue;
 					HANDLE hThread = OpenThread(THREAD_ALL_ACCESS, FALSE, te.th32ThreadID);
 					SuspendThread(hThread);
-					CloseHandle(hThread);
+					XDbgCloseHandle(hThread);
 				}
 
 				te.dwSize = sizeof(te);
 			} while (Thread32Next(hSnapshot, &te));
 		}
 
-		CloseHandle(hSnapshot);
+		XDbgCloseHandle(hSnapshot);
 	}
 }
 
@@ -655,14 +655,14 @@ void ResumeThreads(DWORD tid)
 						continue;
 					HANDLE hThread = OpenThread(THREAD_ALL_ACCESS, FALSE, te.th32ThreadID);
 					ResumeThread(hThread);
-					CloseHandle(hThread);
+					XDbgCloseHandle(hThread);
 				}
 
 				te.dwSize = sizeof(te);
 			} while (Thread32Next(hSnapshot, &te));
 		}
 
-		CloseHandle(hSnapshot);
+		XDbgCloseHandle(hSnapshot);
 	}
 }
 
@@ -798,6 +798,6 @@ void XDbgProxy::sendThreadInfo()
 			} while (Thread32Next(hSnapshot, &te));
 		}
 
-		CloseHandle(hSnapshot);
+		XDbgCloseHandle(hSnapshot);
 	}
 }

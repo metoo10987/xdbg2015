@@ -16,7 +16,6 @@ XDbgController::XDbgController(void) : _lastContext(_event.ctx)
 	memset(&_lastContext, 0, sizeof(_lastContext));
 }
 
-
 XDbgController::~XDbgController(void)
 {
 	if (_hPipe != INVALID_HANDLE_VALUE)
@@ -68,6 +67,65 @@ bool XDbgController::stop(DWORD pid)
 extern BOOL(__stdcall * Real_GetThreadContext)(HANDLE a0,
 	LPCONTEXT a1);
 
+#ifdef _M_X64
+void XDbgController::cloneThreadContext(CONTEXT* dest, const CONTEXT* src, DWORD ContextFlags)
+{
+	// NO IMPLEMENTATION
+	assert(false);
+}
+
+#else
+void XDbgController::cloneThreadContext(CONTEXT* dest, const CONTEXT* src, DWORD ContextFlags)
+{
+	// no extended registers && floating point registers
+
+	if ((ContextFlags & CONTEXT_CONTROL) == CONTEXT_CONTROL) {
+		/* EBP, EIP and EFLAGS */
+		dest->Ebp = src->Ebp;
+		dest->Eip = src->Eip;
+		dest->EFlags = src->EFlags;
+		dest->SegCs = src->SegCs;
+		dest->SegSs = src->SegSs;
+		dest->Esp = src->Esp;
+	}
+
+	if ((ContextFlags & CONTEXT_SEGMENTS) == CONTEXT_SEGMENTS) {
+		dest->SegGs = src->SegGs;
+		dest->SegFs = src->SegFs;
+		dest->SegEs = src->SegEs;
+		dest->SegDs = src->SegDs;
+	}
+
+	if ((ContextFlags & CONTEXT_INTEGER) == CONTEXT_INTEGER) {
+		dest->Eax = src->Eax;
+		dest->Ebx = src->Ebx;
+		dest->Ecx = src->Ecx;
+		dest->Edx = src->Edx;
+		dest->Esi = src->Esi;
+		dest->Edi = src->Edi;
+	}
+
+	if ((ContextFlags & CONTEXT_DEBUG_REGISTERS) == CONTEXT_DEBUG_REGISTERS) {
+		dest->Dr0 = src->Dr0;
+		dest->Dr1 = src->Dr1;
+		dest->Dr2 = src->Dr2;
+		dest->Dr3 = src->Dr3;
+		dest->Dr6 = src->Dr6;
+		dest->Dr7 = src->Dr7;
+	}
+}
+#endif
+
+void XDbgController::setThreadContext(HANDLE hThread, const CONTEXT* ctx)
+{
+	cloneThreadContext(&_lastContext, ctx, ctx->ContextFlags);
+}
+
+void XDbgController::getThreadContext(HANDLE hThread, CONTEXT* ctx)
+{
+	cloneThreadContext(ctx, &_lastContext, ctx->ContextFlags);
+}
+
 bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 {
 	MyTrace("%s()", __FUNCTION__);
@@ -84,7 +142,9 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 	}
 
 	*lpDebugEvent = _event.event;
-	// _lastContext = _event.ctx;
+	_lastContext = _event.ctx;
+	// FIXME:
+	/*
 	HANDLE hThread = OpenThread(THREAD_ALL_ACCESS, FALSE, lpDebugEvent->dwThreadId);
 	assert(hThread);
 	// SuspendThread(hThread);
@@ -93,8 +153,9 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 		assert(false);
 	}
 	// ResumeThread(hThread);
-	CloseHandle(hThread);
-	
+	CloseHandle(hThread);	
+	*/
+
 	MyTrace("%s(): tid: %d, lastPc: %p, event_code: %x", __FUNCTION__, lpDebugEvent->dwThreadId, 
 		_lastContext.Eip, lpDebugEvent->dwDebugEventCode);
 

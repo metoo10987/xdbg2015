@@ -336,7 +336,8 @@ BOOL __stdcall Mine_SetThreadContext(HANDLE a0,
 			}
 		}
 
-		return Real_SetThreadContext(a0, a1);
+		dbgctl->setThreadContext(a0, a1);
+		return TRUE;
 	} else
 		return Real_SetThreadContext(a0, a1);
 }
@@ -346,9 +347,14 @@ BOOL __stdcall Mine_GetThreadContext(HANDLE a0,
 {
 	// MyTrace("%s(%p, %p)", __FUNCTION__, a0, a1);
 	if (dbgctl != NULL) {
-		BOOL result = Real_GetThreadContext(a0, a1);
-		if (!result)
-			return result;
+		if (dbgctl->getExceptCode()) {
+			dbgctl->getThreadContext(a0, a1); // Real_GetThreadContext(a0, a1);
+		}
+		else {
+			if (!Real_GetThreadContext(a0, a1))
+				return FALSE;
+		}
+		
 		if ((a1->ContextFlags & CONTEXT_CONTROL) == CONTEXT_CONTROL) {
 			if ((dbgctl->getMask() & CONTEXT_CONTROL) == CONTEXT_CONTROL) {
 				a1->Eip = dbgctl->getPC();
@@ -359,7 +365,7 @@ BOOL __stdcall Mine_GetThreadContext(HANDLE a0,
 					CTX_PC_REG(a1) = (DWORD)dbgctl->getExceptPc();
 			}
 
-			a1->EFlags = dbgctl->getEFlags();
+			// a1->EFlags = dbgctl->getEFlags();
 
 			/* if (dbgctl->getExceptCode() == STATUS_BREAKPOINT) {
 				a1->Eip += 1;
@@ -382,7 +388,7 @@ BOOL __stdcall Mine_GetThreadContext(HANDLE a0,
 			}
 		}
 
-		return result;
+		return TRUE;
 	}
 	else
 		return Real_GetThreadContext(a0, a1);

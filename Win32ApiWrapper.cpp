@@ -39,12 +39,26 @@ NTSTATUS
 IN BOOLEAN Alertable,
 IN PLARGE_INTEGER TimeOut  OPTIONAL) = NULL;
 
+
+/* NTSTATUS
+(NTAPI
+*NtOpenThread)(OUT PHANDLE ThreadHandle,
+IN ACCESS_MASK DesiredAccess,
+IN POBJECT_ATTRIBUTES ObjectAttributes,
+IN PCLIENT_ID ClientId OPTIONAL) = NULL; */
+
+NTSTATUS
+(NTAPI
+*NtClose)(IN HANDLE Handle) = NULL;
+
 CloneFuncDef nativeApiDefs[] = {
 	{ "ntdll.dll", "NtReadFile", (void** )&NtReadFile },
 	{ "ntdll.dll", "NtWriteFile", (void**)&NtWriteFile },
 	{ "ntdll.dll", "NtSuspendThread", (void**)&NtSuspendThread },
 	{ "ntdll.dll", "NtResumeThread", (void**)&NtResumeThread },
 	{ "ntdll.dll", "NtWaitForSingleObject", (void**)&NtWaitForSingleObject },
+	// { "ntdll.dll", "NtOpenThread", (void**)&NtOpenThread }, 
+	{ "ntdll.dll", "NtClose", (void**)&NtClose },
 };
 
 
@@ -192,4 +206,9 @@ DWORD WINAPI XDbgResumeThread(IN HANDLE hThread)
 HANDLE WINAPI XDbgGetCurrentProcess()
 {
 	return (HANDLE )-1;
+}
+
+BOOL WINAPI XDbgCloseHandle(HANDLE hObj)
+{
+	return NtClose(hObj) == 0;
 }
