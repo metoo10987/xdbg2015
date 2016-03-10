@@ -92,6 +92,8 @@ protected:
 protected:
 	HANDLE		_hPipe;
 	// HANDLE		_hEvent;
+	OVERLAPPED	_overlap;
+	bool		_pending;
 	HANDLE		_hProcess;
 	ULONG		_exceptAddr;
 	ULONG		_exceptCode;

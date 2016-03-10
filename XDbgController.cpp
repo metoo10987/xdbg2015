@@ -8,6 +8,7 @@ XDbgController::XDbgController(void) : _lastContext(_event.ctx)
 {
 	_hPipe = INVALID_HANDLE_VALUE;
 	// _hEvent = NULL;
+	_pending = false;
 	_pc = 0;
 	_mask = 0;
 	_eflags = 0;
@@ -152,24 +153,36 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 		return false;
 	}
 #endif
-	OVERLAPPED overlap;
-	memset(&overlap, 0, sizeof(overlap));
-	// overlap.hEvent = _hEvent;
+	
 	DWORD len;
-	if (!ReadFile(_hPipe, &_event, sizeof(_event), &len, &overlap)) {
-		if (GetLastError() == ERROR_IO_PENDING) {
-			if (WaitForSingleObject(_hPipe, dwMilliseconds) != WAIT_OBJECT_0)
-				return false;
-			DWORD numread;
-			if (!GetOverlappedResult(_hPipe, &overlap, &numread, FALSE)) {
-				assert(false);
+
+	if (!_pending) {
+		memset(&_overlap, 0, sizeof(_overlap));
+		if (ReadFile(_hPipe, &_event, sizeof(_event), &len, &_overlap))
+			_pending = false;
+		else
+			if (GetLastError() == ERROR_IO_PENDING)
+				_pending = true;
+			else {
+				MyTrace("%s(): read pipe failed, pipe: %p", __FUNCTION__, _hPipe);
+				_pending = false;
 				return false;
 			}
-		} else {
-			MyTrace("%s(): read pipe failed, pipe: %p", __FUNCTION__, _hPipe);
-			return false;
-		}
 	}
+
+	// overlap.hEvent = _hEvent;
+	
+	if (_pending) {
+		if (WaitForSingleObject(_hPipe, dwMilliseconds) != WAIT_OBJECT_0)
+			return false;
+		/* DWORD numread;
+		if (!GetOverlappedResult(_hPipe, &_overlap, &numread, FALSE)) {
+			assert(false);
+			return false;
+		} */
+
+		_pending = false;
+	} 
 
 	*lpDebugEvent = _event.event;
 	_lastContext = _event.ctx;
