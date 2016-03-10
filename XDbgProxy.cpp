@@ -312,6 +312,7 @@ LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 		}
 	}
 
+	// FIXME: 没有只在可能修改的其它寄存器，应该直接返回所有寄存器的值
 	if ((ack.mask & CONTEXT_DEBUG_REGISTERS) == CONTEXT_DEBUG_REGISTERS) {
 		ExceptionInfo->ContextRecord->ContextFlags |= CONTEXT_DEBUG_REGISTERS;
 		copyDbgRegs(*ExceptionInfo->ContextRecord, ack.dbgRegs);
