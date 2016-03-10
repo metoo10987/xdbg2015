@@ -131,8 +131,12 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 	MyTrace("%s()", __FUNCTION__);
 	// assert(dwMilliseconds == INFINITE); // no timeout
 	if (dwMilliseconds != INFINITE) {
-		if (WaitForSingleObject(_hPipe, dwMilliseconds) != WAIT_OBJECT_0)
-			return false;
+
+		// NO IMPL
+		/* if (WaitForSingleObject(_hPipe, dwMilliseconds) != WAIT_OBJECT_0)
+			return false; */
+		assert(false);
+		return false;
 	}
 
 	DWORD len;
