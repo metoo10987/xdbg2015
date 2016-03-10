@@ -82,6 +82,9 @@ BOOL (__stdcall * Real_CreateProcessW)(LPCWSTR a0,
 BOOL (__stdcall * Real_DebugActiveProcess)(DWORD a0)
     = DebugActiveProcess;
 
+BOOL(__stdcall * Real_DebugActiveProcessStop)(DWORD a0)
+= DebugActiveProcessStop;
+
 BOOL (__stdcall * Real_WaitForDebugEvent)(LPDEBUG_EVENT a0,
                                           DWORD a1)
     = WaitForDebugEvent;
@@ -186,6 +189,15 @@ BOOL __stdcall Mine_DebugActiveProcess(DWORD a0)
 	} else {
 		return Real_DebugActiveProcess(a0);
 	}
+}
+
+BOOL __stdcall Mine_DebugActiveProcesStop(DWORD a0)
+{
+	MyTrace("%s()", __FUNCTION__);
+	if (dbgctl)
+		return dbgctl->stop(a0);
+	else
+		return Real_DebugActiveProcessStop(a0);
 }
 
 BOOL(__stdcall * Real_GetThreadContext)(HANDLE a0,
@@ -325,8 +337,7 @@ BOOL __stdcall Mine_SetThreadContext(HANDLE a0,
 		}
 
 		return Real_SetThreadContext(a0, a1);
-	}
-	else
+	} else
 		return Real_SetThreadContext(a0, a1);
 }
 
