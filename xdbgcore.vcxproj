@@ -83,6 +83,7 @@
     <None Include="xdbgcore.def" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="CloneFunction.cpp" />
     <ClCompile Include="common.cpp" />
     <ClCompile Include="creatwth.cpp" />
     <ClCompile Include="detours.cpp" />
@@ -91,6 +92,7 @@
     <ClCompile Include="Lock.cpp" />
     <ClCompile Include="modules.cpp" />
     <ClCompile Include="Thread.cpp" />
+    <ClCompile Include="Win32ApiWrapper.cpp" />
     <ClCompile Include="XDbgController.cpp" />
     <ClCompile Include="xdbgcore.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
@@ -98,11 +100,13 @@
     <ClCompile Include="XDbgProxy.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="CloneFunction.h" />
     <ClInclude Include="common.h" />
     <ClInclude Include="detours.h" />
     <ClInclude Include="detver.h" />
     <ClInclude Include="Lock.h" />
     <ClInclude Include="Thread.h" />
+    <ClInclude Include="Win32ApiWrapper.h" />
     <ClInclude Include="XDbgController.h" />
     <ClInclude Include="XDbgProxy.h" />
   </ItemGroup>

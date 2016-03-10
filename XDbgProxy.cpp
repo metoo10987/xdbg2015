@@ -5,6 +5,7 @@
 #include <Psapi.h>
 #include "XDbgProxy.h"
 #include <assert.h>
+#include "Win32ApiWrapper.h"
 
 XDbgProxy::XDbgProxy(void)
 {
@@ -16,7 +17,6 @@ XDbgProxy::XDbgProxy(void)
 	_lastExceptCode = 0;
 	_lastExceptAddr = 0;
 }
-
 
 XDbgProxy::~XDbgProxy(void)
 {
@@ -32,7 +32,7 @@ BOOL XDbgProxy::sendDbgEvent(const WAIT_DEBUG_EVENT& event)
 	}
 
 	DWORD len;
-	if (!WriteFile(_hPipe, &event, sizeof(event), &len, NULL)) {
+	if (!XDbgWriteFile(_hPipe, &event, sizeof(event), &len, NULL)) {
 		// log error
 		return FALSE;
 	}
@@ -43,7 +43,7 @@ BOOL XDbgProxy::sendDbgEvent(const WAIT_DEBUG_EVENT& event)
 BOOL XDbgProxy::recvDbgAck(struct CONTINUE_DEBUG_EVENT& ack)
 {
 	DWORD len;
-	if (!ReadFile(_hPipe, &ack, sizeof(ack), &len, NULL)) {
+	if (!XDbgReadFile(_hPipe, &ack, sizeof(ack), &len, NULL)) {
 		// log error
 		return FALSE;
 	}
@@ -55,13 +55,13 @@ BOOL XDbgProxy::sendDbgEvent(const WAIT_DEBUG_EVENT& event, struct CONTINUE_DEBU
 {
 	BOOL result;
 	if (freeze)
-		suspendThreads(GetCurrentThreadId());
+		suspendThreads(XDbgGetCurrentThreadId());
 	if (sendDbgEvent(event))
 		result = recvDbgAck(ack);
 	else
 		result = FALSE;
 	if (freeze)
-		resumeThread(GetCurrentThreadId());
+		resumeThreads(XDbgGetCurrentThreadId());
 	return result;
 }
 
@@ -89,17 +89,17 @@ void XDbgProxy::suspendThreads(DWORD tid)
 	for (it = _threads.begin(); it != _threads.end(); it++) {
 		if (it->first == tid || it->first == getId())
 			continue;
-		SuspendThread(it->second);
+		XDbgSuspendThread(it->second);
 	}
 }
 
-void XDbgProxy::resumeThread(DWORD tid)
+void XDbgProxy::resumeThreads(DWORD tid)
 {
 	std::map<DWORD, HANDLE>::iterator it;
 	for (it = _threads.begin(); it != _threads.end(); it++) {
 		if (it->first == tid || it->first == getId())
 			continue;
-		ResumeThread(it->second);
+		XDbgResumeThread(it->second);
 	}
 }
 
@@ -158,8 +158,8 @@ VOID CALLBACK XDbgProxy::LdrDllNotification(ULONG NotificationReason, PCLDR_DLL_
 {
 	WAIT_DEBUG_EVENT event;
 	DEBUG_EVENT& msg = event.event;
-	msg.dwProcessId = GetCurrentProcessId();
-	msg.dwThreadId = GetCurrentThreadId();
+	msg.dwProcessId = XDbgGetCurrentProcessId();
+	msg.dwThreadId = XDbgGetCurrentThreadId();
 
 	if (NotificationReason == LDR_DLL_NOTIFICATION_REASON_LOADED) {
 		msg.dwDebugEventCode = LOAD_DLL_DEBUG_EVENT;
@@ -183,6 +183,11 @@ VOID CALLBACK XDbgProxy::LdrDllNotification(ULONG NotificationReason, PCLDR_DLL_
 
 bool XDbgProxy::initialize()
 {
+	if (!InitWin32ApiWrapper()) {
+		assert(false);
+		return false;
+	}
+
 	if (!createPipe())
 		return false;
 
@@ -234,18 +239,18 @@ LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 	if (!_attached)
 		return EXCEPTION_CONTINUE_SEARCH;
 
-	if (GetCurrentThreadId() == getId())
+	if (XDbgGetCurrentThreadId() == getId())
 		return EXCEPTION_CONTINUE_SEARCH;
 
-	if (getThreadHandle(GetCurrentThreadId()) == NULL) {
+	if (getThreadHandle(XDbgGetCurrentThreadId()) == NULL) {
 		return EXCEPTION_CONTINUE_SEARCH;
 	}
 
 	WAIT_DEBUG_EVENT event;
 	DEBUG_EVENT& msg = event.event;
 
-	msg.dwProcessId = GetCurrentProcessId();
-	msg.dwThreadId = GetCurrentThreadId();
+	msg.dwProcessId = XDbgGetCurrentProcessId();
+	msg.dwThreadId = XDbgGetCurrentThreadId();
 	if (ExceptionInfo->ExceptionRecord->ExceptionCode == DBG_PRINTEXCEPTION_C) {
 
 		msg.dwDebugEventCode = OUTPUT_DEBUG_STRING_EVENT;
@@ -342,7 +347,7 @@ LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 
 bool XDbgProxy::createPipe()
 {
-	std::string name = makePipeName(GetCurrentProcessId());	
+	std::string name = makePipeName(XDbgGetCurrentProcessId());	
 	_hPipe = ::CreateNamedPipe(name.c_str(), PIPE_ACCESS_DUPLEX, PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT, 
 		PIPE_UNLIMITED_INSTANCES, EVENT_MESSAGE_SIZE, CONTINUE_MESSAGE_SIZE, NMPWAIT_USE_DEFAULT_WAIT, NULL);
 
@@ -492,7 +497,7 @@ BOOL XDbgProxy::DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 
 	switch (reason) {
 	case DLL_PROCESS_ATTACH:
-		_mainThreadId = GetProcessMainThread(GetCurrentProcessId());
+		_mainThreadId = GetProcessMainThread(XDbgGetCurrentProcessId());
 		_mainThreadTeb = GetThreadTeb(_mainThreadId);
 		// MyTrace("%s(): process(%u) xdbg proxy loaded. thread id: %u", __FUNCTION__, GetCurrentProcessId(), _mainThreadId);
 		break;
@@ -505,8 +510,8 @@ BOOL XDbgProxy::DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 		if (!_attached)
 			return TRUE;
 		// REPORT CreateThread
-		msg.dwProcessId = GetCurrentProcessId();
-		msg.dwThreadId = GetCurrentThreadId();
+		msg.dwProcessId = XDbgGetCurrentProcessId();
+		msg.dwThreadId = XDbgGetCurrentThreadId();
 		msg.dwDebugEventCode = CREATE_THREAD_DEBUG_EVENT;
 		msg.u.CreateThread.hThread = NULL;
 		msg.u.CreateThread.lpStartAddress = (LPTHREAD_START_ROUTINE )GetThreadStartAddress(GetCurrentThread());
@@ -516,7 +521,7 @@ BOOL XDbgProxy::DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 
 		}
 
-		addThread(GetCurrentThreadId());
+		addThread(XDbgGetCurrentThreadId());
 		// MYTRACE("%s(): process(%u) xdbg proxy attach thread. thread id: %u", __FUNCTION__,
 		//	GetCurrentProcessId(), GetCurrentThreadId());
 		break;
@@ -528,8 +533,8 @@ BOOL XDbgProxy::DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 		// REPORT ExitThread
 		if (!_attached)
 			return TRUE;
-		msg.dwProcessId = GetCurrentProcessId();
-		msg.dwThreadId = GetCurrentThreadId();
+		msg.dwProcessId = XDbgGetCurrentProcessId();
+		msg.dwThreadId = XDbgGetCurrentThreadId();
 		msg.dwDebugEventCode = EXIT_THREAD_DEBUG_EVENT;
 		if (!GetExitCodeThread(GetCurrentThread(), &msg.u.ExitThread.dwExitCode))
 			msg.u.ExitThread.dwExitCode = 0;
@@ -538,7 +543,7 @@ BOOL XDbgProxy::DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 			
 		}
 
-		delThread(GetCurrentThreadId());
+		delThread(XDbgGetCurrentThreadId());
 		break;
 	};
 
@@ -619,7 +624,7 @@ void SuspendThreads(DWORD tid)
 		te.dwSize = sizeof(te);
 		if (Thread32First(hSnapshot, &te)) {
 			do {
-				if (te.th32OwnerProcessID == GetCurrentProcessId()) {
+				if (te.th32OwnerProcessID == XDbgGetCurrentProcessId()) {
 
 					if (te.th32ThreadID == tid)
 						continue;
@@ -644,7 +649,7 @@ void ResumeThreads(DWORD tid)
 		te.dwSize = sizeof(te);
 		if (Thread32First(hSnapshot, &te)) {
 			do {
-				if (te.th32OwnerProcessID == GetCurrentProcessId()) {
+				if (te.th32OwnerProcessID == XDbgGetCurrentProcessId()) {
 
 					if (te.th32ThreadID == tid)
 						continue;
@@ -663,7 +668,7 @@ void ResumeThreads(DWORD tid)
 
 void XDbgProxy::onDbgConnect()
 {
-	SuspendThreads(GetCurrentThreadId());
+	SuspendThreads(XDbgGetCurrentThreadId());
 
 	WAIT_DEBUG_EVENT event;
 	CONTINUE_DEBUG_EVENT ack;
@@ -674,7 +679,7 @@ void XDbgProxy::onDbgConnect()
 	sendProcessInfo();
 	sendThreadInfo();
 	sendModuleInfo();
-	ResumeThreads(GetCurrentThreadId());
+	ResumeThreads(XDbgGetCurrentThreadId());
 }
 
 void XDbgProxy::onDbgDisconnect()
@@ -719,7 +724,7 @@ void XDbgProxy::sendModuleInfo()
 	CONTINUE_DEBUG_EVENT ack;
 
 	msg.dwDebugEventCode = LOAD_DLL_DEBUG_EVENT;
-	msg.dwProcessId = GetCurrentProcessId();
+	msg.dwProcessId = XDbgGetCurrentProcessId();
 	msg.dwThreadId = _mainThreadId;
 
 	char modName[MAX_PATH + 1];
@@ -769,7 +774,7 @@ void XDbgProxy::sendThreadInfo()
 	CONTINUE_DEBUG_EVENT ack;
 
 	msg.dwDebugEventCode = CREATE_THREAD_DEBUG_EVENT;
-	msg.dwProcessId = GetCurrentProcessId();
+	msg.dwProcessId = XDbgGetCurrentProcessId();
 	
 	HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
 	if (hSnapshot != INVALID_HANDLE_VALUE) {
@@ -777,7 +782,7 @@ void XDbgProxy::sendThreadInfo()
 		te.dwSize = sizeof(te);
 		if (Thread32First(hSnapshot, &te)) {
 			do {
-				if (te.th32OwnerProcessID == GetCurrentProcessId()) {
+				if (te.th32OwnerProcessID == XDbgGetCurrentProcessId()) {
 
 					if (te.th32ThreadID == getId())
 						continue; // skip xdbg thread;

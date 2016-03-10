@@ -62,7 +62,7 @@ protected:
 	bool addThread(DWORD tid);
 	bool delThread(DWORD tid);
 	void suspendThreads(DWORD tid);
-	void resumeThread(DWORD tid);
+	void resumeThreads(DWORD tid);
 	HANDLE getThreadHandle(DWORD tid);
 
 protected:

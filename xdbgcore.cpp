@@ -22,7 +22,6 @@ BOOL APIENTRY DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 	if (reason == DLL_PROCESS_ATTACH) {
 		
 		hInstance = hModule;
-
 		char iniName[MAX_PATH];
 		GetModuleFileName(NULL, iniName, sizeof(iniName) - 1);
 		strcat_s(iniName, ".ini");
