@@ -91,7 +91,7 @@ protected:
 
 protected:
 	HANDLE		_hPipe;
-	HANDLE		_hEvent;
+	// HANDLE		_hEvent;
 	OVERLAPPED	_overlap;
 	bool		_pending;
 	HANDLE		_hProcess;

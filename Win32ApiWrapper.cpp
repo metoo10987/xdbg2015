@@ -195,7 +195,7 @@ DWORD WINAPI XDbgSuspendThread(IN HANDLE hThread)
 DWORD WINAPI XDbgResumeThread(IN HANDLE hThread)
 {
 	DWORD SuspendCount;
-	NTSTATUS status = NtSuspendThread(hThread, &SuspendCount);
+	NTSTATUS status = NtResumeThread(hThread, &SuspendCount);
 	if (status) {
 		return -1;
 	}
