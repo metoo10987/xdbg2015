@@ -252,7 +252,7 @@ BOOL XDbgProxy::DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 		msg.u.CreateThread.hThread = NULL;
 		
 		msg.u.CreateThread.lpStartAddress = (LPTHREAD_START_ROUTINE )
-			GetThreadStartAddress(GetCurrentThread());
+			GetThreadStartAddress(XDbgGetCurrentThread());
 
 		msg.u.CreateThread.lpThreadLocalBase = NtCurrentTeb();
 
@@ -275,7 +275,7 @@ BOOL XDbgProxy::DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 		msg.dwProcessId = XDbgGetCurrentProcessId();
 		msg.dwThreadId = XDbgGetCurrentThreadId();
 		msg.dwDebugEventCode = EXIT_THREAD_DEBUG_EVENT;
-		if (!GetExitCodeThread(GetCurrentThread(), &msg.u.ExitThread.dwExitCode))
+		if (!GetExitCodeThread(XDbgGetCurrentThread(), &msg.u.ExitThread.dwExitCode))
 			msg.u.ExitThread.dwExitCode = 0;
 
 		if (!sendDbgEvent(event, ack)) {
@@ -341,8 +341,8 @@ void XDbgProxy::onDbgConnect()
 
 	DebugEventPacket event;
 	DebugAckPacket ack;
-	event.event.dwProcessId = GetCurrentProcessId();
-	event.event.dwThreadId = GetCurrentThreadId();
+	event.event.dwProcessId = XDbgGetCurrentProcessId();
+	event.event.dwThreadId = XDbgGetCurrentThreadId();
 	event.event.dwDebugEventCode = ATTACHED_EVENT;
 	sendDbgEvent(event, ack, false);
 	sendProcessInfo();
@@ -362,7 +362,7 @@ void XDbgProxy::sendProcessInfo()
 	DebugEventPacket event;
 	DEBUG_EVENT& msg = event.event;
 	DebugAckPacket ack;
-	msg.dwProcessId = GetCurrentProcessId();
+	msg.dwProcessId = XDbgGetCurrentProcessId();
 	msg.dwThreadId = getFirstThread();
 
 	char modName[MAX_PATH + 1];
@@ -410,7 +410,7 @@ void XDbgProxy::sendModuleInfo()
 
 	HMODULE hModules[512];
 	DWORD len;
-	if (!EnumProcessModules(GetCurrentProcess(), hModules, sizeof(hModules), &len)) {
+	if (!EnumProcessModules(XDbgGetCurrentProcess(), hModules, sizeof(hModules), &len)) {
 		// log error
 		assert(false);
 		return;

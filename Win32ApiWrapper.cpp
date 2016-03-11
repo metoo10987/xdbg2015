@@ -208,6 +208,11 @@ HANDLE WINAPI XDbgGetCurrentProcess()
 	return (HANDLE )-1;
 }
 
+HANDLE WINAPI XDbgGetCurrentThread()
+{
+	return (HANDLE)-1;
+}
+
 BOOL WINAPI XDbgCloseHandle(HANDLE hObj)
 {
 	return NtClose(hObj) == 0;
