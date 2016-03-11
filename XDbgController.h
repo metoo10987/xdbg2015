@@ -1,8 +1,9 @@
 #pragma once
 
 #include "common.h"
+#include "ThreadMgr.h"
 
-class XDbgController
+class XDbgController // : public ThreadMgr
 {
 public:
 	static XDbgController& instance()
@@ -22,8 +23,8 @@ public:
 		return _hProcess;
 	}
 
-	void setThreadContext(HANDLE hThread, const CONTEXT* ctx);
-	void getThreadContext(HANDLE hThread, CONTEXT* ctx);
+	bool setThreadContext(HANDLE hThread, const CONTEXT* ctx);
+	bool getThreadContext(HANDLE hThread, CONTEXT* ctx);
 
 	DWORD getExceptCode() const
 	{

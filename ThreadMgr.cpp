@@ -46,10 +46,11 @@ void ThreadMgr::clearThreads()
 	_threads.clear();
 }
 
-bool ThreadMgr::addThread(DWORD tid)
+HANDLE ThreadMgr::addThread(DWORD tid)
 {
-	_threads[tid] = openThread(THREAD_ALL_ACCESS, FALSE, tid);
-	return true;
+	HANDLE hThread = openThread(THREAD_ALL_ACCESS, FALSE, tid);
+	_threads[tid] = hThread;
+	return hThread;
 }
 
 bool ThreadMgr::delThread(DWORD tid)
@@ -85,4 +86,15 @@ HANDLE ThreadMgr::threadIdToHandle(DWORD tid)
 	if (it == _threads.end())
 		return NULL;
 	return it->second;
+}
+
+DWORD ThreadMgr::threadHandleToId(HANDLE handle)
+{
+	std::map<DWORD, HANDLE>::iterator it;
+	for (it = _threads.begin(); it != _threads.end(); it++) {
+		if (it->second == handle)
+			return it->first;
+	}
+
+	return 0;
 }

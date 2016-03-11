@@ -10,7 +10,7 @@ public:
 
 	bool addAllThreads(DWORD excluded);
 	void clearThreads();
-	bool addThread(DWORD tid);
+	HANDLE addThread(DWORD tid);
 	bool delThread(DWORD tid);
 	void suspendAll(DWORD excluded);
 	void resumeAll(DWORD excluded);

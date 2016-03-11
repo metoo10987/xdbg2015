@@ -66,5 +66,6 @@ typedef struct _THREAD_BASIC_INFORMATION {
 
 PVOID WINAPI GetThreadStartAddress(HANDLE hThread);
 PVOID WINAPI GetThreadStartAddress(DWORD tid);
+DWORD WINAPI GetThreadIdFromHandle(HANDLE hThread);
 _TEB* GetThreadTeb(DWORD tid);
 DWORD GetProcessMainThread(DWORD dwProcID);

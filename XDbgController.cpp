@@ -13,6 +13,7 @@ XDbgController::XDbgController(void)
 	_hProcess = NULL;
 	_ContextFlags = 0;
 	_hInst = 0;
+	resetDbgEvent();
 }
 
 XDbgController::~XDbgController(void)
@@ -71,17 +72,6 @@ bool XDbgController::stop(DWORD pid)
 	_hPipe = NULL;
 	resetDbgEvent();
 	return true;
-}
-
-void XDbgController::setThreadContext(HANDLE hThread, const CONTEXT* ctx)
-{
-	_ContextFlags |= ctx->ContextFlags;
-	cloneThreadContext(&_event.ctx, ctx, ctx->ContextFlags);
-}
-
-void XDbgController::getThreadContext(HANDLE hThread, CONTEXT* ctx)
-{
-	cloneThreadContext(ctx, &_event.ctx, ctx->ContextFlags);
 }
 
 bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
@@ -153,8 +143,14 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 	case CREATE_THREAD_DEBUG_EVENT:
 		{
 			lpDebugEvent->u.CreateThread.hThread = OpenThread(THREAD_ALL_ACCESS, FALSE, lpDebugEvent->dwThreadId);
-			MyTrace("%s(): CREATE_THREAD_DEBUG_EVENT. hThread: %x, tid: %u", __FUNCTION__, 
+			MyTrace("%s(): CREATE_THREAD_DEBUG_EVENT. hThread: %x, tid: %u", __FUNCTION__,
 				lpDebugEvent->u.CreateThread.hThread, lpDebugEvent->dwThreadId);
+		}
+		break;
+
+	case EXIT_THREAD_DEBUG_EVENT:
+		{
+			// delThread(lpDebugEvent->dwThreadId);
 		}
 		break;
 
@@ -488,8 +484,7 @@ BOOL __stdcall Mine_SetThreadContext(HANDLE a0,
 {
 	MyTrace("%s(%p, %p)", __FUNCTION__, a0, a1);
 	XDbgController& dbgctl = XDbgController::instance();
-	dbgctl.setThreadContext(a0, a1);
-	return TRUE;
+	return dbgctl.setThreadContext(a0, a1) ? TRUE: FALSE;
 }
 
 BOOL __stdcall Mine_GetThreadContext(HANDLE a0,
@@ -497,7 +492,8 @@ BOOL __stdcall Mine_GetThreadContext(HANDLE a0,
 {
 	// MyTrace("%s(%p, %p)", __FUNCTION__, a0, a1);
 	XDbgController& dbgctl = XDbgController::instance();
-	dbgctl.getThreadContext(a0, a1);
+	if (!dbgctl.getThreadContext(a0, a1))
+		return FALSE;
 	
 	if ((dbgctl.getContextFlags() & CONTEXT_CONTROL) != CONTEXT_CONTROL) {
 		if (dbgctl.getExceptCode() == STATUS_BREAKPOINT) {		
@@ -522,4 +518,39 @@ bool XDbgController::hookDbgApi()
 	DetourAttach(&(PVOID&)Real_GetThreadContext, &(PVOID&)Mine_GetThreadContext);
 	DetourAttach(&(PVOID&)Real_SetThreadContext, &(PVOID&)Mine_SetThreadContext);
 	return DetourTransactionCommit() == NO_ERROR;
+}
+
+bool XDbgController::setThreadContext(HANDLE hThread, const CONTEXT* ctx)
+{
+	DWORD threadId = GetThreadIdFromHandle(hThread);
+	if (threadId == 0) {
+		assert(false);
+		return Real_SetThreadContext(hThread, ctx) == TRUE;
+	}
+
+	DWORD currentThreadId = _event.event.dwThreadId;
+	if (threadId == currentThreadId && _event.event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT) {
+		_ContextFlags |= ctx->ContextFlags;
+		cloneThreadContext(&_event.ctx, ctx, ctx->ContextFlags);
+		return true;
+	}
+	else
+		return Real_SetThreadContext(hThread, ctx) == TRUE;
+}
+
+bool XDbgController::getThreadContext(HANDLE hThread, CONTEXT* ctx)
+{
+	DWORD threadId = GetThreadIdFromHandle(hThread);
+	if (threadId == 0) {
+		assert(false);
+		return Real_GetThreadContext(hThread, ctx) == TRUE;
+	}
+
+	DWORD currentThreadId = _event.event.dwThreadId;
+	if (threadId == currentThreadId && _event.event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT) {
+		cloneThreadContext(ctx, &_event.ctx, ctx->ContextFlags);
+		return true;
+	}
+	else
+		return Real_GetThreadContext(hThread, ctx) == TRUE;
 }

@@ -86,10 +86,12 @@ PVOID WINAPI GetThreadStartAddress(HANDLE hThread)
 	}
 
 	UINT32 ThreadQuerySetWin32StartAddress = 9;
-	ntStatus = NtQueryInformationThread(hDupHandle, ThreadQuerySetWin32StartAddress, &dwStartAddress, sizeof(PVOID), NULL);
+	ntStatus = NtQueryInformationThread(hDupHandle, ThreadQuerySetWin32StartAddress, &dwStartAddress, 
+		sizeof(PVOID), NULL);
 	XDbgCloseHandle(hDupHandle);
 	if (ntStatus != 0) {
-		MyTrace("%s(): NtQueryInformationThread() failed. status: %x", __FUNCTION__, ntStatus);
+		MyTrace("%s(): NtQueryInformationThread() failed. status: %x, threadHandle: %x, threadId: %d", 
+			__FUNCTION__, ntStatus, hThread, GetThreadId(hThread));
 		return 0;
 	}
 
@@ -103,7 +105,6 @@ PVOID WINAPI GetThreadStartAddress(DWORD tid)
 	XDbgCloseHandle(hThread);
 	return addr;
 }
-
 
 _TEB* GetThreadTeb(DWORD tid)
 {
@@ -221,3 +222,30 @@ void cloneThreadContext(CONTEXT* dest, const CONTEXT* src, DWORD ContextFlags)
 	}
 }
 #endif
+
+DWORD WINAPI GetThreadIdFromHandle(HANDLE hThread)
+{
+	NTSTATUS ntStatus;
+	if (NtQueryInformationThread == NULL)
+		NtQueryInformationThread = (pNtQIT)GetProcAddress(GetModuleHandle("ntdll.dll"),
+		"NtQueryInformationThread");
+
+	if (NtQueryInformationThread == NULL) {
+		MyTrace("%s(): cannot found NtQueryInformationThread()", __FUNCTION__);
+		return 0;
+	}
+
+	HANDLE hThread2;
+	if (!DuplicateHandle(GetCurrentProcess(), hThread, GetCurrentProcess(), &hThread2, 
+		THREAD_ALL_ACCESS, FALSE, 0))
+		return 0;
+
+	UINT32 ThreadBasicInformation = 0;
+	THREAD_BASIC_INFORMATION bi;
+	ntStatus = NtQueryInformationThread(hThread2, ThreadBasicInformation, &bi, sizeof(bi), NULL);
+	CloseHandle(hThread2);
+	if (ntStatus != 0)
+		return 0;
+
+	return bi.ClientId.UniqueThread;
+}
