@@ -125,8 +125,18 @@ BOOL __stdcall Mine_CreateProcessA(LPCSTR a0,
 	}
 
 	if (dbgctl) {
-		if (injectDll(a9->dwProcessId))
-			dbgctl->attach(a9->dwProcessId);
+		if (injectDll(a9->dwProcessId)) {
+			int i;
+			for (i = 30; i > 0; i --) {
+				if (dbgctl->attach(a9->dwProcessId))
+					break;
+
+				Sleep(100);
+			}
+			
+			if (i == 0)
+				return FALSE;
+		}
 
 		if ((flags & CREATE_SUSPENDED) == 0) {
 			ResumeThread(a9->hThread);
@@ -167,8 +177,18 @@ BOOL __stdcall Mine_CreateProcessW(LPCWSTR a0,
 	}
 
 	if (dbgctl) {
-		if (injectDll(a9->dwProcessId))
-			dbgctl->attach(a9->dwProcessId);
+		if (injectDll(a9->dwProcessId)) {
+			int i;
+			for (i = 30; i > 0; i--) {
+				if (dbgctl->attach(a9->dwProcessId))
+					break;
+
+				Sleep(100);
+			}
+
+			if (i == 0)
+				return FALSE;
+		}
 
 		if ((flags & CREATE_SUSPENDED) == 0) {
 			ResumeThread(a9->hThread);
