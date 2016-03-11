@@ -1,11 +1,14 @@
 #include <tchar.h>
 #include <Windows.h>
 #include <WinNT.h>
-#include <tlhelp32.h>
-#include <Psapi.h>
 #include "XDbgProxy.h"
 #include <assert.h>
 #include "Win32ApiWrapper.h"
+#include "Win32ApiWrapper.h"
+#include <tlhelp32.h>
+#include <Psapi.h>
+#include "Utils.h"
+#include "common.h"
 
 XDbgProxy::XDbgProxy(void)
 {
@@ -24,7 +27,7 @@ XDbgProxy::~XDbgProxy(void)
 		XDbgCloseHandle(_hPipe);
 }
 
-BOOL XDbgProxy::sendDbgEvent(const WAIT_DEBUG_EVENT& event)
+BOOL XDbgProxy::sendDbgEvent(const DebugEventPacket& event)
 {
 	if (event.event.dwDebugEventCode > LAST_EVENT) {
 		assert(false);
@@ -40,7 +43,7 @@ BOOL XDbgProxy::sendDbgEvent(const WAIT_DEBUG_EVENT& event)
 	return TRUE;
 }
 
-BOOL XDbgProxy::recvDbgAck(struct CONTINUE_DEBUG_EVENT& ack)
+BOOL XDbgProxy::recvDbgAck(struct DebugAckPacket& ack)
 {
 	DWORD len;
 	if (!XDbgReadFile(_hPipe, &ack, sizeof(ack), &len, NULL)) {
@@ -51,101 +54,24 @@ BOOL XDbgProxy::recvDbgAck(struct CONTINUE_DEBUG_EVENT& ack)
 	return TRUE;
 }
 
-BOOL XDbgProxy::sendDbgEvent(const WAIT_DEBUG_EVENT& event, struct CONTINUE_DEBUG_EVENT& ack, bool freeze)
+BOOL XDbgProxy::sendDbgEvent(const DebugEventPacket& event, struct DebugAckPacket& ack, bool freeze)
 {
 	BOOL result;
 	if (freeze)
-		suspendThreads(XDbgGetCurrentThreadId());
+		suspendAll(XDbgGetCurrentThreadId());
 	if (sendDbgEvent(event))
 		result = recvDbgAck(ack);
 	else
 		result = FALSE;
 	if (freeze)
-		resumeThreads(XDbgGetCurrentThreadId());
+		resumeAll(XDbgGetCurrentThreadId());
 	return result;
-}
-
-void XDbgProxy::postDbgEvent(const WAIT_DEBUG_EVENT& event)
-{
-	MutexGuard guard(&_mutex);
-	_events.push_back(event);
-}
-
-bool XDbgProxy::addThread(DWORD tid)
-{
-	_threads[tid] = OpenThread(THREAD_ALL_ACCESS, FALSE, tid);
-	return true;
-}
-
-bool XDbgProxy::delThread(DWORD tid)
-{
-	_threads.erase(tid);
-	return true;
-}
-
-void XDbgProxy::suspendThreads(DWORD tid)
-{
-	std::map<DWORD, HANDLE>::iterator it;
-	for (it = _threads.begin(); it != _threads.end(); it++) {
-		if (it->first == tid || it->first == getId())
-			continue;
-		XDbgSuspendThread(it->second);
-	}
-}
-
-void XDbgProxy::resumeThreads(DWORD tid)
-{
-	std::map<DWORD, HANDLE>::iterator it;
-	for (it = _threads.begin(); it != _threads.end(); it++) {
-		if (it->first == tid || it->first == getId())
-			continue;
-		XDbgResumeThread(it->second);
-	}
-}
-
-HANDLE XDbgProxy::getThreadHandle(DWORD tid)
-{
-	std::map<DWORD, HANDLE>::iterator it;
-	it = _threads.find(tid);
-	if (it == _threads.end())
-		return NULL;
-	return it->second;
 }
 
 LONG CALLBACK XDbgProxy::_VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 {
 	return XDbgProxy::instance().VectoredHandler(ExceptionInfo);
 }
-
-typedef struct _UNICODE_STRING {
-  USHORT  Length;     //UNICODE占用的内存字节数，个数*2；
-  USHORT  MaximumLength;
-  PWSTR  Buffer;
-} UNICODE_STRING ,*PUNICODE_STRING, *PCUNICODE_STRING;
-
-typedef struct _LDR_DLL_LOADED_NOTIFICATION_DATA {
-    ULONG Flags;                    //Reserved.
-    PCUNICODE_STRING FullDllName;   //The full path name of the DLL module.
-    PCUNICODE_STRING BaseDllName;   //The base file name of the DLL module.
-    PVOID DllBase;                  //A pointer to the base address for the DLL in memory.
-    ULONG SizeOfImage;              //The size of the DLL image, in bytes.
-} LDR_DLL_LOADED_NOTIFICATION_DATA, *PLDR_DLL_LOADED_NOTIFICATION_DATA;
-
-typedef struct _LDR_DLL_UNLOADED_NOTIFICATION_DATA {
-    ULONG Flags;                    //Reserved.
-    PCUNICODE_STRING FullDllName;   //The full path name of the DLL module.
-    PCUNICODE_STRING BaseDllName;   //The base file name of the DLL module.
-    PVOID DllBase;                  //A pointer to the base address for the DLL in memory.
-    ULONG SizeOfImage;              //The size of the DLL image, in bytes.
-} LDR_DLL_UNLOADED_NOTIFICATION_DATA, *PLDR_DLL_UNLOADED_NOTIFICATION_DATA;
-
-typedef union _LDR_DLL_NOTIFICATION_DATA {
-    LDR_DLL_LOADED_NOTIFICATION_DATA Loaded;
-    LDR_DLL_UNLOADED_NOTIFICATION_DATA Unloaded;
-} LDR_DLL_NOTIFICATION_DATA, *PLDR_DLL_NOTIFICATION_DATA, *PCLDR_DLL_NOTIFICATION_DATA;
-
-#define LDR_DLL_NOTIFICATION_REASON_LOADED		1
-#define LDR_DLL_NOTIFICATION_REASON_UNLOADED	2
 
 VOID CALLBACK XDbgProxy::_LdrDllNotification(ULONG NotificationReason, PCLDR_DLL_NOTIFICATION_DATA NotificationData, 
 	PVOID Context)
@@ -156,7 +82,7 @@ VOID CALLBACK XDbgProxy::_LdrDllNotification(ULONG NotificationReason, PCLDR_DLL
 VOID CALLBACK XDbgProxy::LdrDllNotification(ULONG NotificationReason, PCLDR_DLL_NOTIFICATION_DATA NotificationData, 
 	PVOID Context)
 {
-	WAIT_DEBUG_EVENT event;
+	DebugEventPacket event;
 	DEBUG_EVENT& msg = event.event;
 	msg.dwProcessId = XDbgGetCurrentProcessId();
 	msg.dwThreadId = XDbgGetCurrentThreadId();
@@ -175,7 +101,7 @@ VOID CALLBACK XDbgProxy::LdrDllNotification(ULONG NotificationReason, PCLDR_DLL_
 	} else
 		return;
 	
-	CONTINUE_DEBUG_EVENT ack;
+	DebugAckPacket ack;
 	if (!sendDbgEvent(event, ack)) {
 
 	}	
@@ -215,38 +141,21 @@ bool XDbgProxy::initialize()
 	return true;
 }
 
-/* static inline void copyDbgRegs(CONTEXT* dest, const CONTEXT* src)
-{
-	dest->Dr0 = src->Dr0;
-	dest->Dr1 = src->Dr1;
-	dest->Dr2 = src->Dr2;
-	dest->Dr3 = src->Dr3;
-	dest->Dr6 = src->Dr6;
-	dest->Dr7 = src->Dr7;
-} */
 
-#define DBG_PRINTEXCEPTION_WIDE_C		(0x4001000AL)
 
 LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 {
-	/* printf("%s, code: %x, addr: %p\n", __FUNCTION__, ExceptionInfo->ExceptionRecord->ExceptionCode, 
-		ExceptionInfo->ExceptionRecord->ExceptionAddress);
-	CONTEXT ctx;
-	ctx.ContextFlags = CONTEXT_CONTROL;
-	GetThreadContext(GetCurrentThread(), &ctx);
-	printf("%s(): pc: %p\n", __FUNCTION__, ctx.Eip); */
-
 	if (!_attached)
 		return EXCEPTION_CONTINUE_SEARCH;
 
 	if (XDbgGetCurrentThreadId() == getId())
 		return EXCEPTION_CONTINUE_SEARCH;
 
-	if (getThreadHandle(XDbgGetCurrentThreadId()) == NULL) {
+	if (threadIdToHandle(XDbgGetCurrentThreadId()) == NULL) {
 		return EXCEPTION_CONTINUE_SEARCH;
 	}
 
-	WAIT_DEBUG_EVENT event;
+	DebugEventPacket event;
 	DEBUG_EVENT& msg = event.event;
 
 	msg.dwProcessId = XDbgGetCurrentProcessId();
@@ -267,13 +176,6 @@ LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 		
 		msg.dwDebugEventCode = EXCEPTION_DEBUG_EVENT;
 		
-		/* if (_lastException.ExceptionCode == ExceptionInfo->ExceptionRecord->ExceptionCode && 
-			_lastException.ExceptionAddress == ExceptionInfo->ExceptionRecord->ExceptionAddress) {
-			msg.u.Exception.dwFirstChance = 0;
-		} else {
-			msg.u.Exception.dwFirstChance = 1;
-		} */
-
 		if (_lastException == ExceptionInfo->ExceptionRecord && 
 			_lastExceptCode == ExceptionInfo->ExceptionRecord->ExceptionCode && 
 			_lastExceptAddr == ExceptionInfo->ExceptionRecord->ExceptionAddress) {
@@ -289,56 +191,21 @@ LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 	};
 
 	event.ctx = *ExceptionInfo->ContextRecord;
-	CONTINUE_DEBUG_EVENT ack;
+	DebugAckPacket ack;
 	if (!sendDbgEvent(event, ack)) {
 		// log error
 		return EXCEPTION_CONTINUE_SEARCH;
 	}
 
-	if (ack.mask & CONTEXT_CONTROL) {
-		ExceptionInfo->ContextRecord->ContextFlags |= CONTEXT_CONTROL;
-		CTX_PC_REG(ExceptionInfo->ContextRecord) = ack.newpc;
-		ExceptionInfo->ContextRecord->EFlags = ack.eflags;
-	} else if (ExceptionInfo->ExceptionRecord->ExceptionCode == STATUS_BREAKPOINT) {
+	cloneThreadContext(ExceptionInfo->ContextRecord, &ack.ctx, ack.ContextFlags);
 
-		// FIXME: 可能需要 HOOK SetThreadContext() / GetThreadContext()
-		// TitanEngine 中是怎么处理自动跳到下一个指令的，有待研究
-		// 注:	异常处理函数返回时， 会根据 ExceptionInfo->ContextRecord 调用 SetThreadContext
-		//		这可能是调试器设置的单步标志无效的原因
-		// *** 正常的调试流程， STATUS_BREAKPOINT 异常调试器返回 DBG_CONTINUE 时，会从下一次指令执行
-
-		if (ack.dwContinueStatus == DBG_CONTINUE) {
-			CTX_PC_REG(ExceptionInfo->ContextRecord) += 1;
+	if ((ack.ContextFlags & CONTEXT_CONTROL) != CONTEXT_CONTROL) {
+		if (ExceptionInfo->ExceptionRecord->ExceptionCode == STATUS_BREAKPOINT) {
+			if (ack.dwContinueStatus == DBG_CONTINUE) {
+				CTX_PC_REG(ExceptionInfo->ContextRecord) += 1;
+			}
 		}
 	}
-
-	// FIXME: 没有只在可能修改的其它寄存器，应该直接返回所有寄存器的值
-	if ((ack.mask & CONTEXT_DEBUG_REGISTERS) == CONTEXT_DEBUG_REGISTERS) {
-		ExceptionInfo->ContextRecord->ContextFlags |= CONTEXT_DEBUG_REGISTERS;
-		copyDbgRegs(*ExceptionInfo->ContextRecord, ack.dbgRegs);
-	}
-
-	/*
-	if (ack.flags & CDE_SINGLE_STEP) {
-		ExceptionInfo->ContextRecord->EFlags |= SINGLE_STEP_FLAG; // single step
-	}
-	else {
-		ExceptionInfo->ContextRecord->EFlags &= ~SINGLE_STEP_FLAG;
-	}*/
-
-	/* if (ack.flags & CDE_DEBUG_REG) {
-		copyDbgRegs(*ExceptionInfo->ContextRecord, ack.dbgRegs);
-	} */
-
-	/* CONTEXT ctx;
-	ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS | CONTEXT_CONTROL;
-	GetThreadContext(GetCurrentThread(), &ctx);
-	// TODO: Copy debugging register
-	copyDbgRegs(ExceptionInfo->ContextRecord, &ctx);
-	if (ctx.EFlags & SINGLE_STEP_FLAG) {
-		assert(false);
-		ExceptionInfo->ContextRecord->EFlags |= SINGLE_STEP_FLAG; // single step
-	} */
 
 	if (ack.dwContinueStatus == DBG_CONTINUE)
 		return EXCEPTION_CONTINUE_EXECUTION;
@@ -355,156 +222,24 @@ bool XDbgProxy::createPipe()
 	return (_hPipe != INVALID_HANDLE_VALUE);
 }
 
-typedef NTSTATUS(NTAPI* pNtQIT)(HANDLE ThreadHandle, LONG ThreadInformationClass, PVOID ThreadInformation,
-	ULONG ThreadInformationLength, PULONG ReturnLength OPTIONAL);
-
-static pNtQIT NtQueryInformationThread = NULL;
-
-PVOID WINAPI GetThreadStartAddress(HANDLE hThread)
-{
-    NTSTATUS ntStatus;
-    HANDLE hDupHandle;
-    PVOID dwStartAddress;
-		
-	if (NtQueryInformationThread == NULL)
-		NtQueryInformationThread = (pNtQIT)GetProcAddress(GetModuleHandle("ntdll.dll"),
-			"NtQueryInformationThread");
-
-	if (NtQueryInformationThread == NULL) {
-		MyTrace("%s(): cannot found NtQueryInformationThread()", __FUNCTION__);
-		return 0;
-	}
-
-    HANDLE hCurrentProcess = GetCurrentProcess();
-    if(!DuplicateHandle(hCurrentProcess, hThread, hCurrentProcess, &hDupHandle, THREAD_QUERY_INFORMATION, FALSE, 0)){
-        SetLastError(ERROR_ACCESS_DENIED);
-		MyTrace("%s(): cannot found open thread", __FUNCTION__);
-        return 0;
-    }
-	
-	UINT32 ThreadQuerySetWin32StartAddress = 9;
-    ntStatus = NtQueryInformationThread(hDupHandle, ThreadQuerySetWin32StartAddress, &dwStartAddress, sizeof(PVOID), NULL);
-    XDbgCloseHandle(hDupHandle);
-	if (ntStatus != 0) {
-		MyTrace("%s(): NtQueryInformationThread() failed. status: %x", __FUNCTION__, ntStatus);
-		return 0;
-	}
-
-    return dwStartAddress;
-}
-
-PVOID WINAPI GetThreadStartAddress(DWORD tid)
-{
-	HANDLE hThread = OpenThread(THREAD_ALL_ACCESS, FALSE, tid);
-	PVOID addr = GetThreadStartAddress(hThread);
-	XDbgCloseHandle(hThread);
-	return addr;
-}
-
-typedef ULONG KPRIORITY;
-
-typedef struct _CLIENT_ID {
-	DWORD   UniqueProcess;
-	DWORD   UniqueThread;
-} CLIENT_ID;
-typedef   CLIENT_ID   *PCLIENT_ID;
-
-typedef struct _THREAD_BASIC_INFORMATION {
-	NTSTATUS                ExitStatus;
-	PVOID                   TebBaseAddress;
-	CLIENT_ID               ClientId;
-	KAFFINITY               AffinityMask;
-	KPRIORITY               Priority;
-	KPRIORITY               BasePriority;
-
-} THREAD_BASIC_INFORMATION, *PTHREAD_BASIC_INFORMATION;
-
-_TEB* GetThreadTeb(DWORD tid)
-{
-	NTSTATUS ntStatus;
-	if (NtQueryInformationThread == NULL)
-		NtQueryInformationThread = (pNtQIT)GetProcAddress(GetModuleHandle("ntdll.dll"), 
-			"NtQueryInformationThread");
-
-	if (NtQueryInformationThread == NULL) {
-		MyTrace("%s(): cannot found NtQueryInformationThread()", __FUNCTION__);
-		return 0;
-	}
-
-	HANDLE hThread = OpenThread(THREAD_QUERY_INFORMATION, FALSE, tid);
-	UINT32 ThreadBasicInformation = 0;
-	THREAD_BASIC_INFORMATION bi;
-	ntStatus = NtQueryInformationThread(hThread, ThreadBasicInformation, &bi, sizeof(bi), NULL);
-	XDbgCloseHandle(hThread);
-	if (ntStatus != 0)
-		return 0;
-
-	return (_TEB* )bi.TebBaseAddress;
-}
-
-#ifndef MAKEULONGLONG
-#define MAKEULONGLONG(ldw, hdw) ((ULONGLONG(hdw) << 32) | ((ldw) & 0xFFFFFFFF))
-#endif
-
-#ifndef MAXULONGLONG
-#define MAXULONGLONG ((ULONGLONG)~((ULONGLONG)0))
-#endif
-
-DWORD GetProcessMainThread(DWORD dwProcID)
-{
-	DWORD dwMainThreadID = 0;
-	ULONGLONG ullMinCreateTime = MAXULONGLONG;
-
-	HANDLE hThreadSnap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-	if (hThreadSnap != INVALID_HANDLE_VALUE) {
-		THREADENTRY32 th32;
-		th32.dwSize = sizeof(THREADENTRY32);
-		BOOL bOK = TRUE;
-		for (bOK = Thread32First(hThreadSnap, &th32); bOK;
-			bOK = Thread32Next(hThreadSnap, &th32)) {
-			if (th32.th32OwnerProcessID == dwProcID) {
-				HANDLE hThread = OpenThread(THREAD_QUERY_INFORMATION,
-					TRUE, th32.th32ThreadID);
-				if (hThread) {
-					FILETIME afTimes[4] = { 0 };
-					if (GetThreadTimes(hThread,
-						&afTimes[0], &afTimes[1], &afTimes[2], &afTimes[3])) {
-						ULONGLONG ullTest = MAKEULONGLONG(afTimes[0].dwLowDateTime,
-							afTimes[0].dwHighDateTime);
-						if (ullTest && ullTest < ullMinCreateTime) {
-							ullMinCreateTime = ullTest;
-							dwMainThreadID = th32.th32ThreadID; // let it be main... :)
-						}
-					}
-					XDbgCloseHandle(hThread);
-				}
-			}
-		}
-
-		XDbgCloseHandle(hThreadSnap);
-	}
-
-	return (dwMainThreadID);
-}
-
 // SO, THIS MODULE MUST BE A DLL
 BOOL XDbgProxy::DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 {
 	MyTrace("%s()", __FUNCTION__);
 
-	WAIT_DEBUG_EVENT event;
+	DebugEventPacket event;
+	memset(&event, 0, sizeof(event));
+
 	DEBUG_EVENT& msg = event.event;
-	CONTINUE_DEBUG_EVENT ack;
+	DebugAckPacket ack;
 
 	switch (reason) {
 	case DLL_PROCESS_ATTACH:
-		_mainThreadId = GetProcessMainThread(XDbgGetCurrentProcessId());
-		_mainThreadTeb = GetThreadTeb(_mainThreadId);
-		// MyTrace("%s(): process(%u) xdbg proxy loaded. thread id: %u", __FUNCTION__, GetCurrentProcessId(), _mainThreadId);
+		// MyTrace("%s(): process(%u) xdbg proxy loaded. thread id: %u", __FUNCTION__, GetCurrentProcessId(), GetCurrentThreadId());
 		break;
 
 	case DLL_PROCESS_DETACH:
-		// MyTrace("%s(): process(%u) xdbg proxy unloaded. thread id: %u", __FUNCTION__, GetCurrentProcessId(), _mainThreadId);
+		// MyTrace("%s(): process(%u) xdbg proxy unloaded. thread id: %u", __FUNCTION__, GetCurrentProcessId(), GetCurrentThreadId());
 		break;
 
 	case DLL_THREAD_ATTACH:		
@@ -515,7 +250,10 @@ BOOL XDbgProxy::DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 		msg.dwThreadId = XDbgGetCurrentThreadId();
 		msg.dwDebugEventCode = CREATE_THREAD_DEBUG_EVENT;
 		msg.u.CreateThread.hThread = NULL;
-		msg.u.CreateThread.lpStartAddress = (LPTHREAD_START_ROUTINE )GetThreadStartAddress(GetCurrentThread());
+		
+		msg.u.CreateThread.lpStartAddress = (LPTHREAD_START_ROUTINE )
+			GetThreadStartAddress(GetCurrentThread());
+
 		msg.u.CreateThread.lpThreadLocalBase = NtCurrentTeb();
 
 		if (!sendDbgEvent(event, ack)) {
@@ -567,28 +305,6 @@ long XDbgProxy::run()
 
 		if (_attached) {
 
-			/* MutexGuard guard(&_mutex);
-			while (_events.size() > 0) {
-
-				DEBUG_EVENT& msg = _events.front();
-				if (!sendDbgEvent(msg)) {				
-					_attached = false;
-					_events.clear();
-					onDbgDisconnect();
-					break;
-				}
-
-				CONTINUE_DEBUG_EVENT ack;
-				if (!recvDbgAck(ack)) {
-					_attached = false;
-					_events.clear();
-					onDbgDisconnect();
-					break;
-				}
-
-				_events.pop_front();
-			} */
-
 			Sleep(200);
 
 		} else {
@@ -617,62 +333,14 @@ long XDbgProxy::run()
 	return 0;
 }
 
-void SuspendThreads(DWORD tid)
-{
-	HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-	if (hSnapshot != INVALID_HANDLE_VALUE) {
-		THREADENTRY32 te;
-		te.dwSize = sizeof(te);
-		if (Thread32First(hSnapshot, &te)) {
-			do {
-				if (te.th32OwnerProcessID == XDbgGetCurrentProcessId()) {
-
-					if (te.th32ThreadID == tid)
-						continue;
-					HANDLE hThread = OpenThread(THREAD_ALL_ACCESS, FALSE, te.th32ThreadID);
-					SuspendThread(hThread);
-					XDbgCloseHandle(hThread);
-				}
-
-				te.dwSize = sizeof(te);
-			} while (Thread32Next(hSnapshot, &te));
-		}
-
-		XDbgCloseHandle(hSnapshot);
-	}
-}
-
-void ResumeThreads(DWORD tid)
-{
-	HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-	if (hSnapshot != INVALID_HANDLE_VALUE) {
-		THREADENTRY32 te;
-		te.dwSize = sizeof(te);
-		if (Thread32First(hSnapshot, &te)) {
-			do {
-				if (te.th32OwnerProcessID == XDbgGetCurrentProcessId()) {
-
-					if (te.th32ThreadID == tid)
-						continue;
-					HANDLE hThread = OpenThread(THREAD_ALL_ACCESS, FALSE, te.th32ThreadID);
-					ResumeThread(hThread);
-					XDbgCloseHandle(hThread);
-				}
-
-				te.dwSize = sizeof(te);
-			} while (Thread32Next(hSnapshot, &te));
-		}
-
-		XDbgCloseHandle(hSnapshot);
-	}
-}
-
 void XDbgProxy::onDbgConnect()
 {
-	SuspendThreads(XDbgGetCurrentThreadId());
+	clearThreads();
+	addAllThreads(XDbgGetCurrentThreadId());
+	suspendAll(XDbgGetCurrentThreadId());
 
-	WAIT_DEBUG_EVENT event;
-	CONTINUE_DEBUG_EVENT ack;
+	DebugEventPacket event;
+	DebugAckPacket ack;
 	event.event.dwProcessId = GetCurrentProcessId();
 	event.event.dwThreadId = GetCurrentThreadId();
 	event.event.dwDebugEventCode = ATTACHED_EVENT;
@@ -680,7 +348,7 @@ void XDbgProxy::onDbgConnect()
 	sendProcessInfo();
 	sendThreadInfo();
 	sendModuleInfo();
-	ResumeThreads(XDbgGetCurrentThreadId());
+	resumeAll(XDbgGetCurrentThreadId());
 }
 
 void XDbgProxy::onDbgDisconnect()
@@ -691,11 +359,11 @@ void XDbgProxy::onDbgDisconnect()
 void XDbgProxy::sendProcessInfo()
 {
 	MyTrace("%s()", __FUNCTION__);
-	WAIT_DEBUG_EVENT event;
+	DebugEventPacket event;
 	DEBUG_EVENT& msg = event.event;
-	CONTINUE_DEBUG_EVENT ack;
+	DebugAckPacket ack;
 	msg.dwProcessId = GetCurrentProcessId();
-	msg.dwThreadId = _mainThreadId;
+	msg.dwThreadId = getFirstThread();
 
 	char modName[MAX_PATH + 1];
 
@@ -709,9 +377,9 @@ void XDbgProxy::sendProcessInfo()
 	msg.u.CreateProcessInfo.lpBaseOfImage = (PVOID )GetModuleHandle(NULL);
 	GetModuleFileName(GetModuleHandle(NULL), modName, MAX_PATH);
 	msg.u.CreateProcessInfo.lpImageName = modName;
-	msg.u.CreateProcessInfo.lpStartAddress = (LPTHREAD_START_ROUTINE)GetThreadStartAddress(_mainThreadId);
+	msg.u.CreateProcessInfo.lpStartAddress = (LPTHREAD_START_ROUTINE)GetThreadStartAddress(getFirstThread());
 	MyTrace("%s(): main thread start at: %p", __FUNCTION__, msg.u.CreateProcessInfo.lpStartAddress);
-	msg.u.CreateProcessInfo.lpThreadLocalBase = _mainThreadTeb;
+	msg.u.CreateProcessInfo.lpThreadLocalBase = GetThreadTeb(getFirstThread());
 	msg.u.CreateProcessInfo.nDebugInfoSize = 0;
 	sendDbgEvent(event, ack, false);
 }
@@ -720,13 +388,13 @@ void XDbgProxy::sendModuleInfo()
 {
 	MyTrace("%s()", __FUNCTION__);
 
-	WAIT_DEBUG_EVENT event;
+	DebugEventPacket event;
 	DEBUG_EVENT& msg = event.event;
-	CONTINUE_DEBUG_EVENT ack;
+	DebugAckPacket ack;
 
 	msg.dwDebugEventCode = LOAD_DLL_DEBUG_EVENT;
 	msg.dwProcessId = XDbgGetCurrentProcessId();
-	msg.dwThreadId = _mainThreadId;
+	msg.dwThreadId = getFirstThread();
 
 	char modName[MAX_PATH + 1];
 
@@ -770,9 +438,9 @@ void XDbgProxy::sendThreadInfo()
 {
 	MyTrace("%s()", __FUNCTION__);
 
-	WAIT_DEBUG_EVENT event;
+	DebugEventPacket event;
 	DEBUG_EVENT& msg = event.event;
-	CONTINUE_DEBUG_EVENT ack;
+	DebugAckPacket ack;
 
 	msg.dwDebugEventCode = CREATE_THREAD_DEBUG_EVENT;
 	msg.dwProcessId = XDbgGetCurrentProcessId();
@@ -789,7 +457,9 @@ void XDbgProxy::sendThreadInfo()
 						continue; // skip xdbg thread;
 					msg.dwThreadId = te.th32ThreadID;
 					msg.u.CreateThread.hThread = NULL;
-					msg.u.CreateThread.lpStartAddress = (LPTHREAD_START_ROUTINE)GetThreadStartAddress(GetCurrentThread());
+					msg.u.CreateThread.lpStartAddress = (LPTHREAD_START_ROUTINE)
+						GetThreadStartAddress(te.th32ThreadID);
+
 					msg.u.CreateThread.lpThreadLocalBase = GetThreadTeb(te.th32ThreadID);
 					addThread(te.th32ThreadID);
 					sendDbgEvent(event, ack, false);

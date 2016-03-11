@@ -92,6 +92,8 @@
     <ClCompile Include="Lock.cpp" />
     <ClCompile Include="modules.cpp" />
     <ClCompile Include="Thread.cpp" />
+    <ClCompile Include="ThreadMgr.cpp" />
+    <ClCompile Include="Utils.cpp" />
     <ClCompile Include="Win32ApiWrapper.cpp" />
     <ClCompile Include="XDbgController.cpp" />
     <ClCompile Include="xdbgcore.cpp">
@@ -106,6 +108,8 @@
     <ClInclude Include="detver.h" />
     <ClInclude Include="Lock.h" />
     <ClInclude Include="Thread.h" />
+    <ClInclude Include="ThreadMgr.h" />
+    <ClInclude Include="Utils.h" />
     <ClInclude Include="Win32ApiWrapper.h" />
     <ClInclude Include="XDbgController.h" />
     <ClInclude Include="XDbgProxy.h" />

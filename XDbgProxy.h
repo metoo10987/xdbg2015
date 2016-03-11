@@ -6,8 +6,9 @@
 #include <list>
 #include <map>
 #include "common.h"
+#include "ThreadMgr.h"
 
-class XDbgProxy : public Thread
+class XDbgProxy : public Thread, public ThreadMgr
 {
 private:
 	XDbgProxy(void);
@@ -30,10 +31,6 @@ public:
 
 	BOOL DllMain(HANDLE hModule, DWORD ul_reason_for_call, LPVOID lpReserved);
 
-	// TODO: Implement LOAD_DLL_DEBUG_EVENT, UNLOAD_DLL_DEBUG_EVENT By:
-	//	HOOK NtMapViewOfSection & NtUnmapViewOfSection, CHECK DLL LIST WHEN THE SYSCALL RETURNED	
-	// Ignore CREATE_PROCESS_DEBUG_EVENT & EXIT_PROCESS_DEBUG_EVENT & RIP_EVENT
-
 protected:
 	static LONG CALLBACK _VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo);
 	static VOID CALLBACK _LdrDllNotification(ULONG NotificationReason, 
@@ -46,11 +43,11 @@ protected:
 
 	virtual long run();
 
-	BOOL sendDbgEvent(const WAIT_DEBUG_EVENT& event);
-	BOOL recvDbgAck(struct CONTINUE_DEBUG_EVENT& ack);
-	BOOL sendDbgEvent(const WAIT_DEBUG_EVENT& event, struct CONTINUE_DEBUG_EVENT& ack, bool freeze = true);
+	BOOL sendDbgEvent(const DebugEventPacket& event);
+	BOOL recvDbgAck(struct DebugAckPacket& ack);
+	BOOL sendDbgEvent(const DebugEventPacket& event, struct DebugAckPacket& ack, bool freeze = true);
 
-	void postDbgEvent(const WAIT_DEBUG_EVENT& event);
+	void postDbgEvent(const DebugEventPacket& event);
 
 	void onDbgConnect();
 	void onDbgDisconnect();
@@ -58,12 +55,6 @@ protected:
 	void sendProcessInfo();
 	void sendModuleInfo();
 	void sendThreadInfo();
-protected:
-	bool addThread(DWORD tid);
-	bool delThread(DWORD tid);
-	void suspendThreads(DWORD tid);
-	void resumeThreads(DWORD tid);
-	HANDLE getThreadHandle(DWORD tid);
 
 protected:
 	HANDLE					_hPipe;
@@ -71,10 +62,5 @@ protected:
 	EXCEPTION_RECORD*		_lastException;
 	ULONG					_lastExceptCode;
 	PVOID					_lastExceptAddr;
-	volatile int			_stopFlag;
-	std::list<WAIT_DEBUG_EVENT>	_events;
-	Mutex					_mutex;
-	DWORD					_mainThreadId;
-	_TEB*					_mainThreadTeb;
-	std::map<DWORD, HANDLE>	_threads;
+	volatile int			_stopFlag;	
 };

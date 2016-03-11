@@ -3,27 +3,30 @@
 #include <assert.h>
 #include "XDbgController.h"
 #include "common.h"
+#include "Utils.h"
+#include "detours.h"
 
-XDbgController::XDbgController(void) : _lastContext(_event.ctx)
+XDbgController::XDbgController(void)
 {
 	_hPipe = INVALID_HANDLE_VALUE;
-	// _hEvent = NULL;
 	_pending = false;
-	_pc = 0;
-	_mask = 0;
-	_eflags = 0;
-	_exceptAddr = 0;
-	_exceptCode = 0;
 	_hProcess = NULL;
-	memset(&_lastContext, 0, sizeof(_lastContext));
+	_ContextFlags = 0;
+	_hInst = 0;
 }
 
 XDbgController::~XDbgController(void)
 {
 	if (_hPipe != INVALID_HANDLE_VALUE)
 		CloseHandle(_hPipe);
-	/* if (_hEvent)
-		CloseHandle(_hEvent); */
+}
+
+bool XDbgController::initialize(HMODULE hInst, bool hookApi)
+{
+	_hInst = hInst;
+	if (hookApi)
+		return hookDbgApi();
+	return true;
 }
 
 bool XDbgController::attach(DWORD pid)
@@ -39,12 +42,6 @@ bool XDbgController::attach(DWORD pid)
 		return false;
 	}
 
-	/* _hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-	if (_hEvent == NULL) {
-		MyTrace("%s() cannot create event", __FUNCTION__);
-		return false;
-	} */
-
 	_hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
 	if (_hProcess == NULL ){
 		MyTrace("%s() OpenProcess(%u)", __FUNCTION__, pid);
@@ -52,7 +49,8 @@ bool XDbgController::attach(DWORD pid)
 	}
 
 	DEBUG_EVENT event;
-	if (!waitEvent(&event))  {
+	if (!waitEvent(&event)) { // SEND FIRST MSG TO VERIFY CONNECTION
+		MyTrace("%s(): connection is unavailable");
 		assert(false);
 		return false;
 	}
@@ -71,95 +69,29 @@ bool XDbgController::stop(DWORD pid)
 	_hProcess = NULL;
 	CloseHandle(_hPipe);
 	_hPipe = NULL;
-	/* CloseHandle(_hEvent);
-	_hEvent = NULL; */
-	memset(&_lastContext, 0, sizeof(_lastContext));
+	resetDbgEvent();
 	return true;
 }
 
-extern BOOL(__stdcall * Real_GetThreadContext)(HANDLE a0,
-	LPCONTEXT a1);
-
-#ifdef _M_X64
-void XDbgController::cloneThreadContext(CONTEXT* dest, const CONTEXT* src, DWORD ContextFlags)
-{
-	// NO IMPLEMENTATION
-	assert(false);
-}
-
-#else
-void XDbgController::cloneThreadContext(CONTEXT* dest, const CONTEXT* src, DWORD ContextFlags)
-{
-	// no extended registers && floating point registers
-
-	if ((ContextFlags & CONTEXT_CONTROL) == CONTEXT_CONTROL) {
-		/* EBP, EIP and EFLAGS */
-		dest->Ebp = src->Ebp;
-		dest->Eip = src->Eip;
-		dest->EFlags = src->EFlags;
-		dest->SegCs = src->SegCs;
-		dest->SegSs = src->SegSs;
-		dest->Esp = src->Esp;
-	}
-
-	if ((ContextFlags & CONTEXT_SEGMENTS) == CONTEXT_SEGMENTS) {
-		dest->SegGs = src->SegGs;
-		dest->SegFs = src->SegFs;
-		dest->SegEs = src->SegEs;
-		dest->SegDs = src->SegDs;
-	}
-
-	if ((ContextFlags & CONTEXT_INTEGER) == CONTEXT_INTEGER) {
-		dest->Eax = src->Eax;
-		dest->Ebx = src->Ebx;
-		dest->Ecx = src->Ecx;
-		dest->Edx = src->Edx;
-		dest->Esi = src->Esi;
-		dest->Edi = src->Edi;
-	}
-
-	if ((ContextFlags & CONTEXT_DEBUG_REGISTERS) == CONTEXT_DEBUG_REGISTERS) {
-		dest->Dr0 = src->Dr0;
-		dest->Dr1 = src->Dr1;
-		dest->Dr2 = src->Dr2;
-		dest->Dr3 = src->Dr3;
-		dest->Dr6 = src->Dr6;
-		dest->Dr7 = src->Dr7;
-	}
-}
-#endif
-
 void XDbgController::setThreadContext(HANDLE hThread, const CONTEXT* ctx)
 {
-	cloneThreadContext(&_lastContext, ctx, ctx->ContextFlags);
+	_ContextFlags |= ctx->ContextFlags;
+	cloneThreadContext(&_event.ctx, ctx, ctx->ContextFlags);
 }
 
 void XDbgController::getThreadContext(HANDLE hThread, CONTEXT* ctx)
 {
-	cloneThreadContext(ctx, &_lastContext, ctx->ContextFlags);
+	cloneThreadContext(ctx, &_event.ctx, ctx->ContextFlags);
 }
 
 bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 {
 	MyTrace("%s()", __FUNCTION__);
-	// assert(dwMilliseconds == INFINITE); // no timeout
-#if 0
-	if (dwMilliseconds != INFINITE) {
-
-		// NO IMPL
-		/* if (WaitForSingleObject(_hPipe, dwMilliseconds) != WAIT_OBJECT_0)
-			return false; */
-		assert(false);
-		return false;
-	}
-#endif
 	
 	DWORD len;
 
 	if (!_pending) {
-		// ResetEvent(_hEvent);
 		memset(&_overlap, 0, sizeof(_overlap));
-		// _overlap.hEvent = _hEvent;
 		if (ReadFile(_hPipe, &_event, sizeof(_event), &len, &_overlap))
 			_pending = false;
 		else
@@ -189,39 +121,12 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 			_pending = false;
 			return false;
 		}
-
-		/* DWORD numread;
-		if (!GetOverlappedResult(_hPipe, &_overlap, &numread, FALSE)) {
-			assert(false);
-			return false;
-		} */
-
-		
 	} 
 
 	*lpDebugEvent = _event.event;
-	_lastContext = _event.ctx;
-	// FIXME:
-	/*
-	HANDLE hThread = OpenThread(THREAD_ALL_ACCESS, FALSE, lpDebugEvent->dwThreadId);
-	assert(hThread);
-	// SuspendThread(hThread);
-	_lastContext.ContextFlags = CONTEXT_CONTROL;
-	if (!Real_GetThreadContext(hThread, &_lastContext)) {
-		assert(false);
-	}
-	// ResumeThread(hThread);
-	CloseHandle(hThread);	
-	*/
 
 	MyTrace("%s(): tid: %d, lastPc: %p, event_code: %x", __FUNCTION__, lpDebugEvent->dwThreadId, 
-		_lastContext.Eip, lpDebugEvent->dwDebugEventCode);
-
-	_pc = 0;
-	_mask = 0;
-	_eflags = 0;
-	_exceptAddr = 0;
-	_exceptCode = 0;
+		_event.ctx.Eip, lpDebugEvent->dwDebugEventCode);
 
 	switch (lpDebugEvent->dwDebugEventCode) {
 	case CREATE_PROCESS_DEBUG_EVENT:
@@ -288,18 +193,15 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 
 	case EXCEPTION_DEBUG_EVENT:
 		{
-			_exceptAddr = (ULONG )lpDebugEvent->u.Exception.ExceptionRecord.ExceptionAddress;
-			_exceptCode = (ULONG)lpDebugEvent->u.Exception.ExceptionRecord.ExceptionCode;
-			MyTrace("%s(): exception code: %p, addr: %x", __FUNCTION__, lpDebugEvent->u.Exception.ExceptionRecord.ExceptionCode,
-				_exceptAddr);
+			MyTrace("%s(): exception code: %p, addr: %x", __FUNCTION__, 
+				lpDebugEvent->u.Exception.ExceptionRecord.ExceptionCode,
+				lpDebugEvent->u.Exception.ExceptionRecord.ExceptionAddress);
 
-			/* if (lpDebugEvent->u.Exception.ExceptionRecord.ExceptionCode == STATUS_BREAKPOINT)
-				_exceptAddr += 1;
-			*/
 			if (lpDebugEvent->u.Exception.ExceptionRecord.ExceptionCode == STATUS_SINGLE_STEP) {
 				MyTrace("STATUS_SINGLE_STEP");
 			}
 		}
+
 		break;
 
 	default:
@@ -313,24 +215,311 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 bool XDbgController::continueEvent(DWORD dwProcessId, DWORD dwThreadId, DWORD dwContinueStatus)
 {
 	MyTrace("%s(): CONTINUE_EVENT: %x", __FUNCTION__, dwContinueStatus);
-	CONTINUE_DEBUG_EVENT ack;
+	DebugAckPacket ack;
 	ack.dwProcessId = dwProcessId;
 	ack.dwThreadId = dwThreadId;
 	ack.dwContinueStatus = dwContinueStatus;
-	ack.mask = _mask;
-	ack.newpc = _pc;
-	ack.eflags = _eflags;
-	copyDbgRegs(ack.dbgRegs, _dbgRegs);
+	ack.ctx = _event.ctx;
+	ack.ContextFlags = _ContextFlags;
 	DWORD len;
 	if (!WriteFile(_hPipe, &ack, sizeof(ack), &len, NULL)) {
 		return false;
 	}
-
-	_mask = 0;
-	_pc = 0;
-	_eflags = 0;
-	_exceptAddr = 0;
-	_exceptCode = 0;
-
+	
+	resetDbgEvent();
 	return true;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+BOOL(__stdcall * Real_CreateProcessA)(LPCSTR a0,
+	LPSTR a1,
+	LPSECURITY_ATTRIBUTES a2,
+	LPSECURITY_ATTRIBUTES a3,
+	BOOL a4,
+	DWORD a5,
+	LPVOID a6,
+	LPCSTR a7,
+	LPSTARTUPINFOA a8,
+	LPPROCESS_INFORMATION a9)
+	= CreateProcessA;
+
+BOOL(__stdcall * Real_CreateProcessW)(LPCWSTR a0,
+	LPWSTR a1,
+	LPSECURITY_ATTRIBUTES a2,
+	LPSECURITY_ATTRIBUTES a3,
+	BOOL a4,
+	DWORD a5,
+	LPVOID a6,
+	LPCWSTR a7,
+	LPSTARTUPINFOW a8,
+	LPPROCESS_INFORMATION a9)
+	= CreateProcessW;
+
+BOOL(__stdcall * Real_DebugActiveProcess)(DWORD a0)
+= DebugActiveProcess;
+
+BOOL(__stdcall * Real_DebugActiveProcessStop)(DWORD a0)
+= DebugActiveProcessStop;
+
+BOOL(__stdcall * Real_WaitForDebugEvent)(LPDEBUG_EVENT a0,
+	DWORD a1)
+	= WaitForDebugEvent;
+
+BOOL(__stdcall * Real_ContinueDebugEvent)(DWORD a0,
+	DWORD a1,
+	DWORD a2)
+	= ContinueDebugEvent;
+
+BOOL(__stdcall * Real_GetThreadContext)(HANDLE a0,
+	LPCONTEXT a1)
+	= GetThreadContext;
+
+BOOL(__stdcall * Real_SetThreadContext)(HANDLE a0,
+	CONST CONTEXT* a1)
+	= SetThreadContext;
+
+//////////////////////////////////////////////////////////////////////////
+BOOL __stdcall Mine_CreateProcessA(LPCSTR a0,
+	LPSTR a1,
+	LPSECURITY_ATTRIBUTES a2,
+	LPSECURITY_ATTRIBUTES a3,
+	BOOL a4,
+	DWORD dwCreationFlags,
+	LPVOID a6,
+	LPCSTR a7,
+	LPSTARTUPINFOA a8,
+	LPPROCESS_INFORMATION a9)
+{
+	MyTrace("%s()", __FUNCTION__);
+	
+	XDbgController& dbgctl = XDbgController::instance();
+
+	DWORD flags = dwCreationFlags;
+	if (DEBUG_PROCESS & dwCreationFlags) {
+		dwCreationFlags &= ~DEBUG_PROCESS;
+	}
+
+	if (DEBUG_ONLY_THIS_PROCESS & dwCreationFlags)
+		dwCreationFlags &= ~DEBUG_ONLY_THIS_PROCESS;
+
+	dwCreationFlags |= CREATE_SUSPENDED;
+
+	if (!Real_CreateProcessA(a0, a1, a2, a3, a4, dwCreationFlags, a6, a7, a8, a9)){
+		return FALSE;
+	}
+
+	if (injectDll(a9->dwProcessId, dbgctl.getModuleHandle())) {
+		int i;
+		for (i = 30; i > 0; i--) {
+			if (dbgctl.attach(a9->dwProcessId))
+				break;
+
+			Sleep(100);
+		}
+
+		if (i == 0)
+			return FALSE;
+	}
+
+	if ((flags & CREATE_SUSPENDED) == 0) {
+		ResumeThread(a9->hThread);
+	}
+
+	return TRUE;
+}
+
+BOOL __stdcall Mine_CreateProcessW(LPCWSTR a0,
+	LPWSTR a1,
+	LPSECURITY_ATTRIBUTES a2,
+	LPSECURITY_ATTRIBUTES a3,
+	BOOL a4,
+	DWORD dwCreationFlags,
+	LPVOID a6,
+	LPCWSTR a7,
+	LPSTARTUPINFOW a8,
+	LPPROCESS_INFORMATION a9)
+{
+	MyTrace("%s()", __FUNCTION__);
+	DWORD flags = dwCreationFlags;
+	XDbgController& dbgctl = XDbgController::instance();
+
+	if (DEBUG_PROCESS & dwCreationFlags) {
+		dwCreationFlags &= ~DEBUG_PROCESS;
+	}
+
+	if (DEBUG_ONLY_THIS_PROCESS & dwCreationFlags)
+		dwCreationFlags &= ~DEBUG_ONLY_THIS_PROCESS;
+
+	dwCreationFlags |= CREATE_SUSPENDED;
+
+	if (!Real_CreateProcessW(a0, a1, a2, a3, a4, dwCreationFlags, a6, a7, a8, a9)){
+		return FALSE;
+	}
+
+	if (injectDll(a9->dwProcessId, dbgctl.getModuleHandle())) {
+		int i;
+		for (i = 30; i > 0; i--) {
+			if (dbgctl.attach(a9->dwProcessId))
+				break;
+
+			Sleep(100);
+		}
+
+		if (i == 0)
+			return FALSE;
+	}
+
+	if ((flags & CREATE_SUSPENDED) == 0) {
+		ResumeThread(a9->hThread);
+	}
+
+	return TRUE;
+}
+
+BOOL __stdcall Mine_DebugActiveProcess(DWORD a0)
+{
+	MyTrace("%s()", __FUNCTION__);
+	XDbgController& dbgctl = XDbgController::instance();
+	if (injectDll(a0, dbgctl.getModuleHandle()))
+		return dbgctl.attach(a0) ? TRUE : FALSE;
+	else
+		return FALSE;
+}
+
+BOOL __stdcall Mine_DebugActiveProcesStop(DWORD a0)
+{
+	MyTrace("%s()", __FUNCTION__);
+	XDbgController& dbgctl = XDbgController::instance();
+	return dbgctl.stop(a0);
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+#ifdef _DEBUG
+
+static DWORD eventSerial = 0;
+
+void dumpDebugEvent(LPDEBUG_EVENT lpDebugEvent)
+{
+	switch (lpDebugEvent->dwDebugEventCode) {
+	case CREATE_PROCESS_DEBUG_EVENT:
+		MyTrace("DUMP[%d]: CREATE_PROCESS_DEBUG_EVENT [%d][start at %p]", lpDebugEvent->dwThreadId,
+			++eventSerial, lpDebugEvent->u.CreateProcessInfo.lpStartAddress);
+		break;
+
+	case EXIT_PROCESS_DEBUG_EVENT:
+		MyTrace("DUMP[%d]: EXIT_PROCESS_DEBUG_EVENT [%d][exit code %d]", lpDebugEvent->dwThreadId,
+			++eventSerial, lpDebugEvent->u.ExitProcess.dwExitCode);
+		break;
+
+	case CREATE_THREAD_DEBUG_EVENT:
+		MyTrace("DUMP[%d]: CREATE_THREAD_DEBUG_EVENT [%d][start at %p]", lpDebugEvent->dwThreadId,
+			++eventSerial, lpDebugEvent->u.CreateThread.lpStartAddress);
+		break;
+
+	case EXIT_THREAD_DEBUG_EVENT:
+		MyTrace("DUMP[%d]: EXIT_THREAD_DEBUG_EVENT [%d][exit code %d]", lpDebugEvent->dwThreadId,
+			++eventSerial, lpDebugEvent->u.ExitThread.dwExitCode);
+		break;
+
+	case LOAD_DLL_DEBUG_EVENT:
+		MyTrace("DUMP[%d]: LOAD_DLL_DEBUG_EVENT [%d][base %p]", lpDebugEvent->dwThreadId,
+			++eventSerial, lpDebugEvent->u.LoadDll.lpBaseOfDll);
+		break;
+
+	case UNLOAD_DLL_DEBUG_EVENT:
+		MyTrace("DUMP[%d]: UNLOAD_DLL_DEBUG_EVENT [%d][base %p]", lpDebugEvent->dwThreadId,
+			++eventSerial, lpDebugEvent->u.UnloadDll.lpBaseOfDll);
+		break;
+
+	case EXCEPTION_DEBUG_EVENT:
+		MyTrace("DUMP[%d]: EXCEPTION_DEBUG_EVENT [%d][code %x, address %p, firstChance: %d]",
+			lpDebugEvent->dwThreadId, ++eventSerial,
+			lpDebugEvent->u.Exception.ExceptionRecord.ExceptionCode,
+			lpDebugEvent->u.Exception.ExceptionRecord.ExceptionAddress,
+			lpDebugEvent->u.Exception.dwFirstChance);
+		break;
+
+	case OUTPUT_DEBUG_STRING_EVENT:
+		MyTrace("DUMP[%d]: OUTPUT_DEBUG_STRING_EVENT [%d][base %p]", lpDebugEvent->dwThreadId,
+			++eventSerial, lpDebugEvent->u.DebugString.lpDebugStringData);
+		break;
+
+	case RIP_EVENT:
+		MyTrace("DUMP[%d]: RIP_EVENT [%d][err %x]", lpDebugEvent->dwThreadId, ++eventSerial,
+			lpDebugEvent->u.RipInfo.dwError);
+		break;
+
+	default:
+		MyTrace("DUMP[%d]: UNKNOWN EVENT [%d][eventId %x]", lpDebugEvent->dwThreadId, ++eventSerial,
+			lpDebugEvent->dwDebugEventCode);
+		break;
+	}
+}
+
+#endif
+
+//////////////////////////////////////////////////////////////////////////
+
+BOOL __stdcall Mine_WaitForDebugEvent(LPDEBUG_EVENT a0,
+	DWORD a1)
+{
+	MyTrace("%s(%p, %u)", __FUNCTION__, a0, a1);
+	BOOL result = XDbgController::instance().waitEvent(a0, a1) ? TRUE : FALSE;
+#ifdef _DEBUG
+	if (result)
+		dumpDebugEvent(a0);
+#endif
+
+	return result;
+}
+
+BOOL __stdcall Mine_ContinueDebugEvent(DWORD a0,
+	DWORD a1,
+	DWORD a2)
+{
+	MyTrace("%s(%u, %u, %x)", __FUNCTION__, a0, a1, a2);
+	return XDbgController::instance().continueEvent(a0, a1, a2) ? TRUE : FALSE;
+}
+
+BOOL __stdcall Mine_SetThreadContext(HANDLE a0,
+	CONTEXT* a1)
+{
+	MyTrace("%s(%p, %p)", __FUNCTION__, a0, a1);
+	XDbgController& dbgctl = XDbgController::instance();
+	dbgctl.setThreadContext(a0, a1);
+	return TRUE;
+}
+
+BOOL __stdcall Mine_GetThreadContext(HANDLE a0,
+	LPCONTEXT a1)
+{
+	// MyTrace("%s(%p, %p)", __FUNCTION__, a0, a1);
+	XDbgController& dbgctl = XDbgController::instance();
+	dbgctl.getThreadContext(a0, a1);
+	
+	if ((dbgctl.getContextFlags() & CONTEXT_CONTROL) != CONTEXT_CONTROL) {
+		if (dbgctl.getExceptCode() == STATUS_BREAKPOINT) {		
+			CTX_PC_REG(a1) = (DWORD)dbgctl.getExceptAddress() + 1;
+		} else {
+			CTX_PC_REG(a1) = (DWORD)dbgctl.getExceptAddress();
+		}
+	}
+
+	return TRUE;
+}
+
+bool XDbgController::hookDbgApi()
+{
+	DetourTransactionBegin();
+	DetourUpdateThread(GetCurrentThread());
+	DetourAttach(&(PVOID&)Real_CreateProcessA, &(PVOID&)Mine_CreateProcessA);
+	DetourAttach(&(PVOID&)Real_CreateProcessW, &(PVOID&)Mine_CreateProcessW);
+	DetourAttach(&(PVOID&)Real_DebugActiveProcess, &(PVOID&)Mine_DebugActiveProcess);
+	DetourAttach(&(PVOID&)Real_WaitForDebugEvent, &(PVOID&)Mine_WaitForDebugEvent);
+	DetourAttach(&(PVOID&)Real_ContinueDebugEvent, &(PVOID&)Mine_ContinueDebugEvent);
+	DetourAttach(&(PVOID&)Real_GetThreadContext, &(PVOID&)Mine_GetThreadContext);
+	DetourAttach(&(PVOID&)Real_SetThreadContext, &(PVOID&)Mine_SetThreadContext);
+	return DetourTransactionCommit() == NO_ERROR;
 }

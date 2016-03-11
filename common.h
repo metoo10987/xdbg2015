@@ -13,8 +13,6 @@ void* CastProcAddr(T p)
 	return u1.f;
 };
 
-#define EVENT_MESSAGE_SIZE		sizeof(DEBUG_EVENT)
-#define CONTINUE_MESSAGE_SIZE	sizeof(CONTINUE_DEBUG_EVENT)
 static inline std::string makePipeName(DWORD pid)
 {
 	char buf[256];
@@ -22,59 +20,38 @@ static inline std::string makePipeName(DWORD pid)
 	return buf;
 }
 
-// #define CDE_SINGLE_STEP		1
-// #define CDE_DEBUG_REG		2
+#define EVENT_MESSAGE_SIZE		sizeof(DebugEventPacket)
+#define CONTINUE_MESSAGE_SIZE	sizeof(DebugAckPacket)
 
-struct WAIT_DEBUG_EVENT {
+struct DebugEventPacket {
 	DEBUG_EVENT		event;
 	CONTEXT			ctx;
 };
 
-struct DbgRegs {
-	ULONG	Dr0;
-	ULONG	Dr1;
-	ULONG	Dr2;
-	ULONG	Dr3;
-	ULONG	Dr6;
-	ULONG	Dr7;
-};
-
-template <typename T1, typename T2>
-inline void copyDbgRegs(T1& dest, const T2& src)
-{
-	dest.Dr0 = src.Dr0;
-	dest.Dr1 = src.Dr1;
-	dest.Dr2 = src.Dr2;
-	dest.Dr3 = src.Dr3;
-	dest.Dr6 = src.Dr6;
-	dest.Dr7 = src.Dr7;
-}
-
-struct CONTINUE_DEBUG_EVENT {
+struct DebugAckPacket {
 	DWORD	dwProcessId;
 	DWORD	dwThreadId;
 	DWORD	dwContinueStatus;
-	ULONG	mask;
-	ULONG	newpc;
-	ULONG	eflags;
-	DbgRegs dbgRegs;
+	CONTEXT	ctx;
+	DWORD	ContextFlags;
 };
 
-void MyTrace(LPCSTR fmt, ...);
+void _MyTrace(LPCSTR fmt, ...);
 
 #ifdef _DEBUG
-#define MYTRACE		MyTrace
+#define MyTrace		_MyTrace
 #else
-#define MYTRACE		
+#define MyTrace
 #endif
 
-#define SINGLE_STEP_FLAG	0x100
+#define SINGLE_STEP_FLAG				0x100
+#define DBG_PRINTEXCEPTION_WIDE_C		(0x4001000AL)
 
 #ifdef _M_X64
 #define CTX_PC_REG(CTX)		(CTX)->Rip
 #else
 #define CTX_PC_REG(CTX)		(CTX)->Eip
-#endif
+#endif // #ifdef _M_X64
 
 #define ATTACHED_EVENT	(RIP_EVENT + 1)
 #define LAST_EVENT		ATTACHED_EVENT

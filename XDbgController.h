@@ -5,9 +5,13 @@
 class XDbgController
 {
 public:
-	XDbgController(void);
-	~XDbgController(void);
+	static XDbgController& instance()
+	{
+		static XDbgController inst;
+		return inst;
+	}
 
+	bool initialize(HMODULE hInst, bool hookDbgApi);
 	bool attach(DWORD pid);
 	bool stop(DWORD pid);
 	bool waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds = INFINITE);
@@ -18,89 +22,55 @@ public:
 		return _hProcess;
 	}
 
-	ULONG getExceptPc() const
-	{
-		return _exceptAddr;
-	}
-
-	ULONG getExceptCode() const
-	{
-		return _exceptCode;
-	}
-
-	ULONG getLastPc() const
-	{
-		return _lastContext.Eip;
-	}
-
-	const CONTEXT& getLastContext() const
-	{
-		return _lastContext;
-	}
-
-	void setPC(ULONG pc)
-	{
-		_pc = pc;
-	}
-	
-	ULONG getPC() const
-	{
-		return _pc;
-	}
-
-	void setMask(ULONG mask)
-	{
-		_mask |= mask;
-	}
-
-	void clearMask(ULONG mask)
-	{
-		_mask &= ~mask;
-	}
-
-	ULONG getMask() const
-	{
-		return _mask;
-	}
-
-	void setEFlags(ULONG flags)
-	{
-		_eflags = flags;
-	}
-
-	ULONG getEFlags() const
-	{
-		return _eflags;
-	}
-
-	void setDbgRegs(const DbgRegs& dbgRegs)
-	{
-		_dbgRegs = dbgRegs;
-	}
-
-	const DbgRegs& getDbgRegs() const
-	{
-		return _dbgRegs;
-	}
-
 	void setThreadContext(HANDLE hThread, const CONTEXT* ctx);
 	void getThreadContext(HANDLE hThread, CONTEXT* ctx);
 
-protected:
-	void cloneThreadContext(CONTEXT* dest, const CONTEXT* src, DWORD ContextFlags);
+	DWORD getExceptCode() const
+	{
+		if (_event.event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT) {
+			return _event.event.u.Exception.ExceptionRecord.ExceptionCode;
+		}
+
+		return 0;
+	}
+
+	ULONG getExceptAddress() const
+	{
+		if (_event.event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT) {
+			return (ULONG )_event.event.u.Exception.ExceptionRecord.ExceptionAddress;
+		}
+
+		return 0;
+	}
+
+	HMODULE getModuleHandle() const
+	{
+		return _hInst;
+	}
+
+	DWORD getContextFlags() const
+	{
+		return _ContextFlags;
+	}
 
 protected:
-	HANDLE		_hPipe;
-	// HANDLE		_hEvent;
-	OVERLAPPED	_overlap;
-	bool		_pending;
-	HANDLE		_hProcess;
-	ULONG		_exceptAddr;
-	ULONG		_exceptCode;
-	CONTEXT&	_lastContext;
-	ULONG		_mask;
-	ULONG		_pc;
-	ULONG		_eflags;
-	DbgRegs		_dbgRegs;
-	WAIT_DEBUG_EVENT	_event;
+	void resetDbgEvent()
+	{
+		memset(&_event, 0, sizeof(_event));
+		_ContextFlags = 0;
+	}
+
+	bool hookDbgApi();
+private:
+	XDbgController(void);
+	~XDbgController(void);
+
+protected:
+	HANDLE				_hPipe;
+	OVERLAPPED			_overlap;
+	bool				_pending;
+	HANDLE				_hProcess;
+	DebugEventPacket	_event;
+	HMODULE				_hInst;
+	DWORD				_ContextFlags;
 };

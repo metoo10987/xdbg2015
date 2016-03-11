@@ -1,7 +1,7 @@
 #include <windows.h>
 #include "common.h"
 
-void MyTrace(LPCSTR fmt, ...)
+void _MyTrace(LPCSTR fmt, ...)
 {
 	SYSTEMTIME st;
 	GetLocalTime(&st);
