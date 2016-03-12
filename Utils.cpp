@@ -15,7 +15,7 @@ bool LoadRemoteDll(DWORD pid, const char* dllPath)
 		return false;
 
 	PVOID p = VirtualAllocEx(hProc, NULL, strlen(dllPath) + 1, MEM_COMMIT, PAGE_READWRITE);
-	DWORD l;
+	SIZE_T l;
 	BOOL r = WriteProcessMemory(hProc, p, dllPath, strlen(dllPath) + 1, &l);
 
 	if (!r) {
@@ -24,9 +24,10 @@ bool LoadRemoteDll(DWORD pid, const char* dllPath)
 		return false;
 	}
 
+	DWORD tid;
 	HANDLE hThread = CreateRemoteThread(hProc, NULL, 0,
 		(LPTHREAD_START_ROUTINE)GetProcAddress(GetModuleHandle("Kernel32.dll"), "LoadLibraryA"),
-		p, 0, &l);
+		p, 0, &tid);
 
 	VirtualFreeEx(hProc, p, strlen(dllPath) + 1, MEM_RELEASE);
 
@@ -36,9 +37,10 @@ bool LoadRemoteDll(DWORD pid, const char* dllPath)
 	}
 
 	WaitForSingleObject(hThread, INFINITE);
-	GetExitCodeThread(hThread, &l);
+	DWORD exitCode;
+	GetExitCodeThread(hThread, &exitCode);
 	CloseHandle(hThread);
-	return l != 0;
+	return exitCode != 0;
 }
 
 BOOL injectDll(DWORD pid, HMODULE hInst)
@@ -163,12 +165,12 @@ DWORD GetProcessMainThread(DWORD dwProcID)
 							dwMainThreadID = th32.th32ThreadID; // let it be main... :)
 						}
 					}
-					XDbgCloseHandle(hThread);
+					CloseHandle(hThread);
 				}
 			}
 		}
 
-		XDbgCloseHandle(hThreadSnap);
+		CloseHandle(hThreadSnap);
 	}
 
 	return (dwMainThreadID);

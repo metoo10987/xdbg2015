@@ -30,7 +30,7 @@ bool XDbgController::initialize(HMODULE hInst, bool hookApi)
 	return true;
 }
 
-bool XDbgController::attach(DWORD pid)
+bool XDbgController::attach(DWORD pid, DWORD tid)
 {
 	MyTrace("%s()", __FUNCTION__);
 	std::string name = makePipeName(pid);
@@ -57,7 +57,7 @@ bool XDbgController::attach(DWORD pid)
 	}
 
 	assert(event.dwDebugEventCode == ATTACHED_EVENT);
-	continueEvent(event.dwProcessId, event.dwThreadId, DBG_CONTINUE);
+	continueEvent(event.dwProcessId, tid ? tid : event.dwThreadId, DBG_CONTINUE);
 	return true;
 }
 
@@ -116,7 +116,7 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 	*lpDebugEvent = _event.event;
 
 	MyTrace("%s(): tid: %d, lastPc: %p, event_code: %x", __FUNCTION__, lpDebugEvent->dwThreadId, 
-		_event.ctx.Eip, lpDebugEvent->dwDebugEventCode);
+		CTX_PC_REG(&_event.ctx), lpDebugEvent->dwDebugEventCode);
 
 	switch (lpDebugEvent->dwDebugEventCode) {
 	case CREATE_PROCESS_DEBUG_EVENT:
@@ -308,7 +308,7 @@ BOOL __stdcall Mine_CreateProcessA(LPCSTR a0,
 	if (injectDll(a9->dwProcessId, dbgctl.getModuleHandle())) {
 		int i;
 		for (i = 30; i > 0; i--) {
-			if (dbgctl.attach(a9->dwProcessId))
+			if (dbgctl.attach(a9->dwProcessId, a9->dwThreadId))
 				break;
 
 			Sleep(100);
@@ -356,7 +356,7 @@ BOOL __stdcall Mine_CreateProcessW(LPCWSTR a0,
 	if (injectDll(a9->dwProcessId, dbgctl.getModuleHandle())) {
 		int i;
 		for (i = 30; i > 0; i--) {
-			if (dbgctl.attach(a9->dwProcessId))
+			if (dbgctl.attach(a9->dwProcessId, a9->dwThreadId))
 				break;
 
 			Sleep(100);
@@ -378,7 +378,7 @@ BOOL __stdcall Mine_DebugActiveProcess(DWORD a0)
 	MyTrace("%s()", __FUNCTION__);
 	XDbgController& dbgctl = XDbgController::instance();
 	if (injectDll(a0, dbgctl.getModuleHandle()))
-		return dbgctl.attach(a0) ? TRUE : FALSE;
+		return dbgctl.attach(a0, GetProcessMainThread(a0)) ? TRUE : FALSE;
 	else
 		return FALSE;
 }
@@ -497,10 +497,11 @@ BOOL __stdcall Mine_GetThreadContext(HANDLE a0,
 	
 	if ((dbgctl.getContextFlags() & CONTEXT_CONTROL) != CONTEXT_CONTROL) {
 		if (dbgctl.getExceptCode() == STATUS_BREAKPOINT) {		
-			CTX_PC_REG(a1) = (DWORD)dbgctl.getExceptAddress() + 1;
-		} else {
-			CTX_PC_REG(a1) = (DWORD)dbgctl.getExceptAddress();
-		}
+			// CTX_PC_REG(a1) = (DWORD)dbgctl.getExceptAddress() + 1;
+			CTX_PC_REG(a1) = CTX_PC_REG(a1) + 1;
+		} /* else {
+			// CTX_PC_REG(a1) = (DWORD)dbgctl.getExceptAddress();
+		} */
 	}
 
 	return TRUE;
@@ -528,8 +529,8 @@ bool XDbgController::setThreadContext(HANDLE hThread, const CONTEXT* ctx)
 		return Real_SetThreadContext(hThread, ctx) == TRUE;
 	}
 
-	DWORD currentThreadId = _event.event.dwThreadId;
-	if (threadId == currentThreadId && _event.event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT) {
+	DWORD currentThreadId = getEventThreadId();
+	if (threadId == currentThreadId && getEventCode() == EXCEPTION_DEBUG_EVENT) {
 		_ContextFlags |= ctx->ContextFlags;
 		cloneThreadContext(&_event.ctx, ctx, ctx->ContextFlags);
 		return true;
@@ -546,8 +547,8 @@ bool XDbgController::getThreadContext(HANDLE hThread, CONTEXT* ctx)
 		return Real_GetThreadContext(hThread, ctx) == TRUE;
 	}
 
-	DWORD currentThreadId = _event.event.dwThreadId;
-	if (threadId == currentThreadId && _event.event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT) {
+	DWORD currentThreadId = getEventThreadId();
+	if (threadId == currentThreadId && getEventCode() == EXCEPTION_DEBUG_EVENT) {
 		cloneThreadContext(ctx, &_event.ctx, ctx->ContextFlags);
 		return true;
 	}

@@ -52,8 +52,8 @@ protected:
 	void onDbgConnect();
 	void onDbgDisconnect();
 
-	void sendProcessInfo();
-	void sendModuleInfo();
+	void sendProcessInfo(DWORD firstThread);
+	void sendModuleInfo(DWORD firstThread);
 	void sendThreadInfo();
 
 protected:

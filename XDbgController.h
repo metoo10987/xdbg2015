@@ -13,7 +13,7 @@ public:
 	}
 
 	bool initialize(HMODULE hInst, bool hookDbgApi);
-	bool attach(DWORD pid);
+	bool attach(DWORD pid, DWORD tid = 0);
 	bool stop(DWORD pid);
 	bool waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds = INFINITE);
 	bool continueEvent(DWORD dwProcessId, DWORD dwThreadId, DWORD dwContinueStatus);
@@ -25,6 +25,21 @@ public:
 
 	bool setThreadContext(HANDLE hThread, const CONTEXT* ctx);
 	bool getThreadContext(HANDLE hThread, CONTEXT* ctx);
+
+	DWORD getEventCode() const
+	{
+		return _event.event.dwDebugEventCode;
+	}
+
+	DWORD getEventProcessId() const
+	{
+		return _event.event.dwProcessId;
+	}
+
+	DWORD getEventThreadId() const
+	{
+		return _event.event.dwThreadId;
+	}
 
 	DWORD getExceptCode() const
 	{

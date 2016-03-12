@@ -11,6 +11,12 @@ inline void copyDbgRegs(T1& dest, const T2& src)
 	dest.Dr7 = src.Dr7;
 }
 
+#ifdef _M_X64
+#define CTX_PC_REG(CTX)		(CTX)->Rip
+#else
+#define CTX_PC_REG(CTX)		(CTX)->Eip
+#endif // #ifdef _M_X64
+
 void cloneThreadContext(CONTEXT* dest, const CONTEXT* src, DWORD ContextFlags);
 
 bool LoadRemoteDll(DWORD pid, const char* dllPath);

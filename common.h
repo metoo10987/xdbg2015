@@ -47,11 +47,5 @@ void _MyTrace(LPCSTR fmt, ...);
 #define SINGLE_STEP_FLAG				0x100
 #define DBG_PRINTEXCEPTION_WIDE_C		(0x4001000AL)
 
-#ifdef _M_X64
-#define CTX_PC_REG(CTX)		(CTX)->Rip
-#else
-#define CTX_PC_REG(CTX)		(CTX)->Eip
-#endif // #ifdef _M_X64
-
 #define ATTACHED_EVENT	(RIP_EVENT + 1)
 #define LAST_EVENT		ATTACHED_EVENT
