@@ -1,0 +1,69 @@
+# Ignored directories
+bin/*/
+obj/
+ipch/
+Win32/
+x64/
+release/
+build/
+gui_build/
+debug/
+*XE Results*/
+doxygen*/
+doc/
+COV/
+minidump/
+
+# Global filetypes to ignore
+*.depend
+*.layout
+*.patch
+*.cscope_file_list
+*.bmarks
+*.chw
+*.cbTemp
+*.ini
+*.opensdf
+*.sdf
+*.suo
+*.autosave
+*.~vsd
+*.dll
+*.exe
+*.pro.user.*
+*.orig
+cov-int*
+*.pdb
+ui_*
+*.aps
+*.pro.user
+*.vcxproj.user
+.DS_Store
+*.ipgset
+
+# Project to ignore
+help/x64*dbg.chm
+help/output/
+bin/x64*dbg.chm
+bin/win32.*
+
+# Debugger files to ignore
+CppCheckResults.xml
+src/dbg/ODbgScript.chm
+src/dbg/ODbgScript.chw
+
+# GUI files
+src/gui/build
+src/gui/Makefile*
+tools/
+RCa*
+RDa*
+RDb*
+src/build-*/
+
+# Exceptions
+!/hooks/AStyleWhore.exe
+!/hooks/AStyle.dll
+!/bin/x64dbg_shell_remove.reg
+!*.lib
+pin.log
