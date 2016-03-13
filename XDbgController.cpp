@@ -41,7 +41,7 @@ bool XDbgController::attach(DWORD pid, DWORD tid)
 	std::string name = makePipeName(pid);
 	// WaitNamedPipe(name.c_str(), NMPWAIT_WAIT_FOREVER);
 	_hPipe = CreateFile(name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 
-		FILE_FLAG_OVERLAPPED, NULL);
+		0 /*FILE_FLAG_OVERLAPPED*/, NULL);
 
 	if (_hPipe == INVALID_HANDLE_VALUE) {
 		MyTrace("%s() cannot connect to '%s'", __FUNCTION__, name.c_str());
@@ -86,8 +86,8 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 	DWORD len;
 
 	if (!_pending) {
-		memset(&_overlap, 0, sizeof(_overlap));
-		if (ReadFile(_hPipe, &_event, sizeof(_event), &len, &_overlap))
+		// memset(&_overlap, 0, sizeof(_overlap));
+		if (ReadFile(_hPipe, &_event, sizeof(_event), &len, NULL /* &_overlap */))
 			_pending = false;
 		else
 			if (GetLastError() == ERROR_IO_PENDING)

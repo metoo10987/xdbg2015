@@ -1,8 +1,8 @@
 #pragma once
 #include <map>
 #include <assert.h>
-
-class ThreadMgr
+#include "Lock.h"
+class ThreadMgr: public Mutex
 {
 public:
 	ThreadMgr();
