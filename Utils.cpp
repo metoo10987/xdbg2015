@@ -222,6 +222,14 @@ void cloneThreadContext(CONTEXT* dest, const CONTEXT* src, DWORD ContextFlags)
 		dest->Dr6 = src->Dr6;
 		dest->Dr7 = src->Dr7;
 	}
+
+	if ((ContextFlags & CONTEXT_FLOATING_POINT) == CONTEXT_FLOATING_POINT) {
+		dest->FloatSave = src->FloatSave;
+	}
+
+	if ((ContextFlags & CONTEXT_EXTENDED_REGISTERS) == CONTEXT_EXTENDED_REGISTERS) {
+		memcpy(dest->ExtendedRegisters, src->ExtendedRegisters, sizeof(src->ExtendedRegisters));
+	}
 }
 #endif
 
