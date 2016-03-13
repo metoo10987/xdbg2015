@@ -90,3 +90,11 @@ protected:
 	HMODULE				_hInst;
 	DWORD				_ContextFlags;
 };
+
+class AutoDebug
+{
+public:
+	virtual bool peekDebugEvent(LPDEBUG_EVENT event, DWORD* continueStatus) = 0;
+};
+
+void registerAutoDebugHandler(AutoDebug* handler);

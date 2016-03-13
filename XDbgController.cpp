@@ -5,6 +5,11 @@
 #include "common.h"
 #include "Utils.h"
 #include "detours.h"
+#include <vector>
+
+std::vector<AutoDebug* > autoDebugHandlers;
+
+//////////////////////////////////////////////////////////////////////////
 
 XDbgController::XDbgController(void)
 {
@@ -457,16 +462,39 @@ void dumpDebugEvent(LPDEBUG_EVENT lpDebugEvent)
 #endif
 
 //////////////////////////////////////////////////////////////////////////
+BOOL __stdcall Mine_ContinueDebugEvent(DWORD a0,
+	DWORD a1,
+	DWORD a2);
 
 BOOL __stdcall Mine_WaitForDebugEvent(LPDEBUG_EVENT a0,
 	DWORD a1)
 {
 	MyTrace("%s(%p, %u)", __FUNCTION__, a0, a1);
-	BOOL result = XDbgController::instance().waitEvent(a0, a1) ? TRUE : FALSE;
+	BOOL result;
+	bool ignore;
+
+	do {
+
+		ignore = false;
+		result = XDbgController::instance().waitEvent(a0, a1) ? TRUE : FALSE;
+
+		if (result) {
 #ifdef _DEBUG
-	if (result)
-		dumpDebugEvent(a0);
+			dumpDebugEvent(a0);
 #endif
+			std::vector<AutoDebug* >::iterator it;
+			for (it = autoDebugHandlers.begin(); it != autoDebugHandlers.end(); it++) {
+				DWORD continueStatus;
+				if (!(*it)->peekDebugEvent(a0, &continueStatus)) {
+					XDbgController::instance().continueEvent(a0->dwProcessId, a0->dwThreadId, continueStatus);
+					ignore = true;
+				}
+			}
+
+		} else
+			break;
+
+	} while (ignore);
 
 	return result;
 }
@@ -554,4 +582,9 @@ bool XDbgController::getThreadContext(HANDLE hThread, CONTEXT* ctx)
 	}
 	else
 		return Real_GetThreadContext(hThread, ctx) == TRUE;
+}
+
+void registerAutoDebugHandler(AutoDebug* handler)
+{
+	autoDebugHandlers.push_back(handler);
 }

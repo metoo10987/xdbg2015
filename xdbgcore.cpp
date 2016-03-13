@@ -7,6 +7,7 @@
 #include "detours.h"
 #include "XDbgController.h"
 #include "common.h"
+#include "AutoDebug.h"
 
 HANDLE hInstance;
 UINT exec_mode = 0;
@@ -46,6 +47,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved)
 				// log error
 				assert(false);
 			}
+
+			registerAutoDebugHandler(new IgnoreException());
 		}
 	}
 	

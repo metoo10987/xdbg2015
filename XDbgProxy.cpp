@@ -367,7 +367,7 @@ void XDbgProxy::sendProcessInfo(DWORD firstThread)
 	msg.dwProcessId = XDbgGetCurrentProcessId();
 	msg.dwThreadId = firstThread;
 
-	char modName[MAX_PATH + 1];
+	char modName[MAX_PATH + 1] = {0};
 
 	memset(&msg.u.CreateProcessInfo, 0, sizeof(msg.u.CreateProcessInfo));
 	msg.dwDebugEventCode = CREATE_PROCESS_DEBUG_EVENT;
@@ -380,7 +380,8 @@ void XDbgProxy::sendProcessInfo(DWORD firstThread)
 	GetModuleFileName(GetModuleHandle(NULL), modName, MAX_PATH);
 	msg.u.CreateProcessInfo.lpImageName = modName;
 	msg.u.CreateProcessInfo.lpStartAddress = (LPTHREAD_START_ROUTINE)GetThreadStartAddress(firstThread);
-	MyTrace("%s(): main thread start at: %p", __FUNCTION__, msg.u.CreateProcessInfo.lpStartAddress);
+	MyTrace("%s(): mod: %s, main thread start at: %p", __FUNCTION__, modName, 
+		msg.u.CreateProcessInfo.lpStartAddress);
 	msg.u.CreateProcessInfo.lpThreadLocalBase = GetThreadTeb(firstThread);
 	msg.u.CreateProcessInfo.nDebugInfoSize = 0;
 	sendDbgEvent(event, ack, false);
@@ -398,7 +399,7 @@ void XDbgProxy::sendModuleInfo(DWORD firstThread)
 	msg.dwProcessId = XDbgGetCurrentProcessId();
 	msg.dwThreadId = firstThread;
 
-	char modName[MAX_PATH + 1];
+	char modName[MAX_PATH + 1] = {0};
 
 	HMODULE hMainModule = GetModuleHandle(NULL);
 	/*msg.u.LoadDll.dwDebugInfoFileOffset = 0;
@@ -429,7 +430,9 @@ void XDbgProxy::sendModuleInfo(DWORD firstThread)
 		msg.u.LoadDll.fUnicode = 0;
 		msg.u.LoadDll.hFile = NULL;
 		msg.u.LoadDll.lpBaseOfDll = hModules[i];
-		GetModuleFileName(hModules[i], modName, MAX_PATH);
+		memset(modName, 0, sizeof(modName));
+		if (GetModuleFileName(hModules[i], modName, MAX_PATH) == 0 || modName[0] == '\0')
+			continue;
 		msg.u.LoadDll.lpImageName = modName;
 		sendDbgEvent(event, ack, false);
 		MyTrace("%s(): module: %s, %p", __FUNCTION__, modName, msg.u.LoadDll.lpBaseOfDll);
