@@ -85,6 +85,7 @@ VOID CALLBACK XDbgProxy::LdrDllNotification(ULONG NotificationReason, PCLDR_DLL_
 	PVOID Context)
 {
 	DebugEventPacket event;
+	memset(&event, 0, sizeof(event));
 	DEBUG_EVENT& msg = event.event;
 	msg.dwProcessId = XDbgGetCurrentProcessId();
 	msg.dwThreadId = XDbgGetCurrentThreadId();
@@ -97,18 +98,23 @@ VOID CALLBACK XDbgProxy::LdrDllNotification(ULONG NotificationReason, PCLDR_DLL_
 		msg.u.LoadDll.fUnicode = 1;
 		msg.u.LoadDll.hFile = NULL;
 		msg.u.LoadDll.lpBaseOfDll = NotificationData->Loaded.DllBase;
-		msg.u.LoadDll.lpImageName = NotificationData->Loaded.FullDllName->Buffer;
+		msg.u.LoadDll.lpImageName = _wcsdup(NotificationData->Loaded.FullDllName->Buffer);
 		msg.u.LoadDll.nDebugInfoSize = 0;
 	} else if (NotificationReason == LDR_DLL_NOTIFICATION_REASON_LOADED) {
 		msg.dwDebugEventCode = UNLOAD_DLL_DEBUG_EVENT;
 		msg.u.UnloadDll.lpBaseOfDll = NotificationData->Unloaded.DllBase;
 	} else
 		return;
-	
-	DebugAckPacket ack;
+
+	// FIXME: 
+	// 加载 Dll 可能在 APC 中进行， 这会导致其它的通知过程（sendDbgEvent）被打断， 造成错误
+	// 现在 Dll 相关的通知全部缓存， 但是会导致 LoadDll 断点失效
+
+	_pendingEvents.push_back(event);
+	/* DebugAckPacket ack;
 	if (!sendDbgEvent(event, ack)) {
 
-	}	
+	} */
 }
 
 bool XDbgProxy::initialize()
@@ -145,8 +151,6 @@ bool XDbgProxy::initialize()
 	return true;
 }
 
-
-
 LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 {
 	MutexGuard guard(this);
@@ -162,6 +166,7 @@ LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 	}
 
 	DebugEventPacket event;
+	memset(&event, 0, sizeof(event));
 	DEBUG_EVENT& msg = event.event;
 
 	msg.dwProcessId = XDbgGetCurrentProcessId();
@@ -313,8 +318,24 @@ long XDbgProxy::run()
 	while (!_stopFlag) {
 
 		if (_attached) {
+			{
+				MutexGuard guard(this);
+				while (_pendingEvents.size() > 0) {
+					DebugEventPacket& event = _pendingEvents.front();
+					DebugAckPacket ack;
+					if (!sendDbgEvent(event, ack)) {
 
-			Sleep(200);
+					}
+
+					if (event.event.dwDebugEventCode == LOAD_DLL_DEBUG_EVENT) {
+						free(event.event.u.LoadDll.lpImageName);
+					}
+
+					_pendingEvents.pop_front();
+				}
+			}
+
+			Sleep(100);
 
 		} else {
 
@@ -344,6 +365,8 @@ long XDbgProxy::run()
 
 void XDbgProxy::onDbgConnect()
 {
+	MutexGuard guard(this);
+
 	clearThreads();
 	addAllThreads(XDbgGetCurrentThreadId());
 	suspendAll(XDbgGetCurrentThreadId());
@@ -362,13 +385,14 @@ void XDbgProxy::onDbgConnect()
 
 void XDbgProxy::onDbgDisconnect()
 {
-
+	// MutexGuard guard(this);
 }
 
 void XDbgProxy::sendProcessInfo(DWORD firstThread)
 {
 	MyTrace("%s()", __FUNCTION__);
 	DebugEventPacket event;
+	memset(&event, 0, sizeof(event));
 	DEBUG_EVENT& msg = event.event;
 	DebugAckPacket ack;
 	msg.dwProcessId = XDbgGetCurrentProcessId();
@@ -399,6 +423,7 @@ void XDbgProxy::sendModuleInfo(DWORD firstThread)
 	MyTrace("%s()", __FUNCTION__);
 
 	DebugEventPacket event;
+	memset(&event, 0, sizeof(event));
 	DEBUG_EVENT& msg = event.event;
 	DebugAckPacket ack;
 
@@ -451,6 +476,7 @@ void XDbgProxy::sendThreadInfo()
 	MyTrace("%s()", __FUNCTION__);
 
 	DebugEventPacket event;
+	memset(&event, 0, sizeof(event));
 	DEBUG_EVENT& msg = event.event;
 	DebugAckPacket ack;
 
