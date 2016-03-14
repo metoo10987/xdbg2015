@@ -563,8 +563,16 @@ bool XDbgController::setThreadContext(HANDLE hThread, const CONTEXT* ctx)
 		cloneThreadContext(&_event.ctx, ctx, ctx->ContextFlags);
 		return true;
 	}
-	else
+	else {
+
+		// THIS IS A BUG IN X64DBG, FIX IT AT HERE.
+		if (getEventCode() == 0 && (ctx->ContextFlags & CONTEXT_CONTROL) == CONTEXT_CONTROL) {
+			if (ctx->EFlags & SINGLE_STEP_FLAG)
+				*(PDWORD)&ctx->EFlags &= ~SINGLE_STEP_FLAG;
+		}
+
 		return Real_SetThreadContext(hThread, ctx) == TRUE;
+	}
 }
 
 bool XDbgController::getThreadContext(HANDLE hThread, CONTEXT* ctx)

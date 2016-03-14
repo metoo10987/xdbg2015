@@ -62,5 +62,7 @@ protected:
 	EXCEPTION_RECORD*		_lastException;
 	ULONG					_lastExceptCode;
 	PVOID					_lastExceptAddr;
-	volatile int			_stopFlag;	
+	volatile int			_stopFlag;
+	typedef std::list<DebugEventPacket> DbgEvtPkgs;
+	DbgEvtPkgs				_pendingEvents;
 };
