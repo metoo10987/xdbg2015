@@ -8,7 +8,7 @@
 #include "common.h"
 #include "ThreadMgr.h"
 
-class XDbgProxy : public Thread, public ThreadMgr
+class XDbgProxy : public Thread, public ThreadMgr, protected Mutex
 {
 private:
 	XDbgProxy(void);

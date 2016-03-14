@@ -88,6 +88,8 @@ VOID CALLBACK XDbgProxy::LdrDllNotification(ULONG NotificationReason, PCLDR_DLL_
 	DEBUG_EVENT& msg = event.event;
 	msg.dwProcessId = XDbgGetCurrentProcessId();
 	msg.dwThreadId = XDbgGetCurrentThreadId();
+	
+	MutexGuard guard(this);
 
 	if (NotificationReason == LDR_DLL_NOTIFICATION_REASON_LOADED) {
 		msg.dwDebugEventCode = LOAD_DLL_DEBUG_EVENT;
@@ -147,6 +149,8 @@ bool XDbgProxy::initialize()
 
 LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 {
+	MutexGuard guard(this);
+
 	if (!_attached)
 		return EXCEPTION_CONTINUE_SEARCH;
 
@@ -162,6 +166,7 @@ LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 
 	msg.dwProcessId = XDbgGetCurrentProcessId();
 	msg.dwThreadId = XDbgGetCurrentThreadId();
+	
 	if (ExceptionInfo->ExceptionRecord->ExceptionCode == DBG_PRINTEXCEPTION_C) {
 
 		msg.dwDebugEventCode = OUTPUT_DEBUG_STRING_EVENT;
@@ -234,6 +239,8 @@ BOOL XDbgProxy::DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 
 	DEBUG_EVENT& msg = event.event;
 	DebugAckPacket ack;
+	
+	MutexGuard guard(this);
 
 	switch (reason) {
 	case DLL_PROCESS_ATTACH:

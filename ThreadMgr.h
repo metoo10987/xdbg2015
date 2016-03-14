@@ -2,7 +2,7 @@
 #include <map>
 #include <assert.h>
 #include "Lock.h"
-class ThreadMgr: public Mutex
+class ThreadMgr
 {
 public:
 	ThreadMgr();
