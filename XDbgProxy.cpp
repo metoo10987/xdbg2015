@@ -237,7 +237,7 @@ bool XDbgProxy::createPipe()
 // SO, THIS MODULE MUST BE A DLL
 BOOL XDbgProxy::DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 {
-	MyTrace("%s()", __FUNCTION__);
+	// MyTrace("%s()", __FUNCTION__);
 
 	DebugEventPacket event;
 	memset(&event, 0, sizeof(event));

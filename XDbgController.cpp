@@ -13,6 +13,7 @@ std::vector<AutoDebug* > autoDebugHandlers;
 
 XDbgController::XDbgController(void)
 {
+	_pid = 0;
 	_hPipe = INVALID_HANDLE_VALUE;
 	_pending = false;
 	_hProcess = NULL;
@@ -38,6 +39,10 @@ bool XDbgController::initialize(HMODULE hInst, bool hookApi)
 bool XDbgController::attach(DWORD pid, DWORD tid)
 {
 	MyTrace("%s()", __FUNCTION__);
+
+	if (_pid)
+		stop(_pid);
+
 	std::string name = makePipeName(pid);
 	// WaitNamedPipe(name.c_str(), NMPWAIT_WAIT_FOREVER);
 	_hPipe = CreateFile(name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 
@@ -49,7 +54,8 @@ bool XDbgController::attach(DWORD pid, DWORD tid)
 	}
 
 	_hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
-	if (_hProcess == NULL ){
+	if (_hProcess == NULL ) {
+		CloseHandle(_hPipe);
 		MyTrace("%s() OpenProcess(%u)", __FUNCTION__, pid);
 		return false;
 	}
@@ -57,25 +63,39 @@ bool XDbgController::attach(DWORD pid, DWORD tid)
 	DEBUG_EVENT event;
 	if (!waitEvent(&event)) { // SEND FIRST MSG TO VERIFY CONNECTION
 		MyTrace("%s(): connection is unavailable");
+		CloseHandle(_hPipe);
+		CloseHandle(_hProcess);
 		assert(false);
 		return false;
 	}
 
 	assert(event.dwDebugEventCode == ATTACHED_EVENT);
 	continueEvent(event.dwProcessId, tid ? tid : event.dwThreadId, DBG_CONTINUE);
+
+	_pid = pid;
 	return true;
 }
 
 bool XDbgController::stop(DWORD pid)
 {
+	assert(_pid = pid);
+
 	if (_hProcess == NULL)
 		return false;
 
-	CloseHandle(_hProcess);
-	_hProcess = NULL;
-	CloseHandle(_hPipe);
-	_hPipe = NULL;
+	if (_hProcess) {
+		CloseHandle(_hProcess);
+		_hProcess = NULL;
+	}
+
+	if (_hPipe) {
+		CloseHandle(_hPipe);
+		_hPipe = NULL;
+	}
+
 	resetDbgEvent();
+	_pid = 0;
+
 	return true;
 }
 
@@ -551,37 +571,49 @@ bool XDbgController::hookDbgApi()
 
 bool XDbgController::setThreadContext(HANDLE hThread, const CONTEXT* ctx)
 {
-	DWORD threadId = GetThreadIdFromHandle(hThread);
-	if (threadId == 0) {
-		assert(false);
-		return Real_SetThreadContext(hThread, ctx) == TRUE;
+	DWORD currentThreadId = getEventThreadId();
+	if (currentThreadId) {
+		DWORD threadId = GetThreadIdFromHandle(hThread);
+		if (threadId == 0) {
+			assert(false);
+			return Real_SetThreadContext(hThread, ctx) == TRUE;
+		}
+
+		if (threadId == currentThreadId && getEventCode() == EXCEPTION_DEBUG_EVENT) {
+			_ContextFlags |= ctx->ContextFlags;
+			cloneThreadContext(&_event.ctx, ctx, ctx->ContextFlags);
+			return true;
+		}
 	}
 
-	DWORD currentThreadId = getEventThreadId();
-	if (threadId == currentThreadId && getEventCode() == EXCEPTION_DEBUG_EVENT) {
-		_ContextFlags |= ctx->ContextFlags;
-		cloneThreadContext(&_event.ctx, ctx, ctx->ContextFlags);
-		return true;
+	// THIS IS A BUG IN X64DBG, FIX IT AT HERE.
+	if (getEventCode() == 0 && (ctx->ContextFlags & CONTEXT_CONTROL) == CONTEXT_CONTROL) {
+		if (ctx->EFlags & SINGLE_STEP_FLAG)
+			*(PDWORD)&ctx->EFlags &= ~SINGLE_STEP_FLAG;
 	}
-	else
-		return Real_SetThreadContext(hThread, ctx) == TRUE;
+
+	return Real_SetThreadContext(hThread, ctx) == TRUE;
 }
 
 bool XDbgController::getThreadContext(HANDLE hThread, CONTEXT* ctx)
 {
-	DWORD threadId = GetThreadIdFromHandle(hThread);
-	if (threadId == 0) {
-		assert(false);
-		return Real_GetThreadContext(hThread, ctx) == TRUE;
+	DWORD currentThreadId = getEventThreadId();
+	if (currentThreadId) {
+
+		DWORD threadId = GetThreadIdFromHandle(hThread);
+		if (threadId == 0) {
+			assert(false);
+			return Real_GetThreadContext(hThread, ctx) == TRUE;
+		}
+
+		if (threadId == currentThreadId && getEventCode() == EXCEPTION_DEBUG_EVENT) {
+			cloneThreadContext(ctx, &_event.ctx, ctx->ContextFlags);
+			return true;
+		}
+
 	}
 
-	DWORD currentThreadId = getEventThreadId();
-	if (threadId == currentThreadId && getEventCode() == EXCEPTION_DEBUG_EVENT) {
-		cloneThreadContext(ctx, &_event.ctx, ctx->ContextFlags);
-		return true;
-	}
-	else
-		return Real_GetThreadContext(hThread, ctx) == TRUE;
+	return Real_GetThreadContext(hThread, ctx) == TRUE;
 }
 
 void registerAutoDebugHandler(AutoDebug* handler)
