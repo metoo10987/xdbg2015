@@ -18,6 +18,15 @@ UINT debug_if = 0;
 
 XDbgController* dbgctl = NULL;
 
+//////////////////////////////////////////////////////////////////////////
+void (* plugin_registercallback)(int pluginHandle, CBTYPE cbType, CBPLUGIN cbPlugin) = NULL;
+int (* plugin_menuaddentry)(int hMenu, int entry, const char* title) = NULL;
+bool (* plugin_menuclear)(int hMenu);
+
+bool preparePlugin();
+
+//////////////////////////////////////////////////////////////////////////
+
 static void loadConfig()
 {
 	char iniName[MAX_PATH];
@@ -34,7 +43,24 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved)
 		hInstance = hModule;
 		loadConfig();
 
-		if (exec_mode == 0) { // proxy mode
+		if (exec_mode == 1 || preparePlugin()) {
+
+			if (!preparePlugin()) {
+				// log error
+				assert(false);
+				return false;
+			}
+
+			exec_mode = 1;
+			MyTrace("xdbgcore initializing. mode: 1");
+			if (!XDbgController::instance().initialize(hModule, debug_if == 0)) {
+				// log error
+				assert(false);
+			}
+
+			registerAutoDebugHandler(new IgnoreException());
+
+		} else if (exec_mode == 0) { // proxy mode
 
 			MyTrace("xdbgcore initializing. mode: 0");
 			if (!XDbgProxy::instance().initialize()) {
@@ -44,14 +70,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved)
 
 			// XDbgProxy::instance().waitForAttach();
 
-		} else if (exec_mode == 1) {
-			MyTrace("xdbgcore initializing. mode: 1");
-			if (!XDbgController::instance().initialize(hModule, true)) {
-				// log error
-				assert(false);
-			}
-
-			registerAutoDebugHandler(new IgnoreException());
 		}
 	}
 	
@@ -65,21 +83,57 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved)
 
 //////////////////////////////////////////////////////////////////////////
 
+#define MENU_ID_ENABLE		1
+#define MENU_ID_DISABLE		2
+#define MENU_ID_ABOUT		3
+
+bool preparePlugin()
+{
+#ifdef _M_X64
+#define X64DBG_DLL		"x64dbg.dll"
+#else
+#define X64DBG_DLL		"x32dbg.dll"
+#endif
+
+	plugin_registercallback = (void ( *)(int pluginHandle, CBTYPE cbType, CBPLUGIN cbPlugin))
+		GetProcAddress(GetModuleHandle(X64DBG_DLL), "_plugin_registercallback");
+
+	plugin_menuaddentry = (int (* )(int hMenu, int entry, const char* title))
+		GetProcAddress(GetModuleHandle(X64DBG_DLL), "_plugin_menuaddentry");
+
+	plugin_menuclear = (bool (*)(int hMenu))
+		GetProcAddress(GetModuleHandle(X64DBG_DLL), "_plugin_menuclear");
+
+	return (plugin_registercallback && plugin_registercallback && plugin_menuclear);
+}
+
+void menuHandler(CBTYPE Type, PLUG_CB_MENUENTRY *Info);
+
 bool pluginit(PLUG_INITSTRUCT* initStruct)
 {
 	initStruct->pluginVersion = XDBG_VER;
 	strcpy(initStruct->pluginName, "XDbg");
 	initStruct->sdkVersion = PLUG_SDKVERSION;
+	
+	assert(plugin_registercallback);
+	plugin_registercallback(initStruct->pluginHandle, CB_MENUENTRY, (CBPLUGIN)menuHandler);
 	return true;
 }
 
 void plugsetup(PLUG_SETUPSTRUCT* setupStruct)
 {
-	int(*plugin_menuadd)(int hMenu, const char* title) = (int(* )(int hMenu, const char* title) )GetProcAddress(GetModuleHandle("x32dbg.dll"), "_plugin_menuadd");
-	plugin_menuadd(setupStruct->hMenu, "Enable XDbg");
+	assert(plugin_menuaddentry);
+	plugin_menuaddentry(setupStruct->hMenu, MENU_ID_ENABLE, "Enable XDbg");
+	plugin_menuaddentry(setupStruct->hMenu, MENU_ID_DISABLE, "Disable XDbg");
+	plugin_menuaddentry(setupStruct->hMenu, MENU_ID_ABOUT, "About XDbg");
 }
 
 bool plugstop()
 {
 	return true;
+}
+
+void menuHandler(CBTYPE Type, PLUG_CB_MENUENTRY *Info)
+{
+
 }
