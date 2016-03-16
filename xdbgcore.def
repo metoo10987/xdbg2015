@@ -1,5 +1,5 @@
 LIBRARY "xdbgcore"
 
 EXPORTS
-	DllMain
-
+	pluginit
+	plugsetup

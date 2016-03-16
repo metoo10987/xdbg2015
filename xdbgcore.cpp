@@ -8,6 +8,9 @@
 #include "XDbgController.h"
 #include "common.h"
 #include "AutoDebug.h"
+#include "pluginsdk/_plugins.h"
+
+#define XDBG_VER		(1)
 
 HANDLE hInstance;
 UINT exec_mode = 0;
@@ -61,3 +64,22 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved)
 }
 
 //////////////////////////////////////////////////////////////////////////
+
+bool pluginit(PLUG_INITSTRUCT* initStruct)
+{
+	initStruct->pluginVersion = XDBG_VER;
+	strcpy(initStruct->pluginName, "XDbg");
+	initStruct->sdkVersion = PLUG_SDKVERSION;
+	return true;
+}
+
+void plugsetup(PLUG_SETUPSTRUCT* setupStruct)
+{
+	int(*plugin_menuadd)(int hMenu, const char* title) = (int(* )(int hMenu, const char* title) )GetProcAddress(GetModuleHandle("x32dbg.dll"), "_plugin_menuadd");
+	plugin_menuadd(setupStruct->hMenu, "Enable XDbg");
+}
+
+bool plugstop()
+{
+	return true;
+}
