@@ -408,7 +408,7 @@ BOOL __stdcall Mine_DebugActiveProcess(DWORD a0)
 		return FALSE;
 }
 
-BOOL __stdcall Mine_DebugActiveProcesStop(DWORD a0)
+BOOL __stdcall Mine_DebugActiveProcessStop(DWORD a0)
 {
 	MyTrace("%s()", __FUNCTION__);
 	XDbgController& dbgctl = XDbgController::instance();
@@ -562,6 +562,7 @@ bool XDbgController::hookDbgApi()
 	DetourAttach(&(PVOID&)Real_CreateProcessA, &(PVOID&)Mine_CreateProcessA);
 	DetourAttach(&(PVOID&)Real_CreateProcessW, &(PVOID&)Mine_CreateProcessW);
 	DetourAttach(&(PVOID&)Real_DebugActiveProcess, &(PVOID&)Mine_DebugActiveProcess);
+	DetourAttach(&(PVOID&)Real_DebugActiveProcessStop, &(PVOID&)Mine_DebugActiveProcessStop);
 	DetourAttach(&(PVOID&)Real_WaitForDebugEvent, &(PVOID&)Mine_WaitForDebugEvent);
 	DetourAttach(&(PVOID&)Real_ContinueDebugEvent, &(PVOID&)Mine_ContinueDebugEvent);
 	DetourAttach(&(PVOID&)Real_GetThreadContext, &(PVOID&)Mine_GetThreadContext);
