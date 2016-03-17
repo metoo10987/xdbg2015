@@ -179,11 +179,73 @@ DWORD GetProcessMainThread(DWORD dwProcID)
 #ifdef _M_X64
 void cloneThreadContext(CONTEXT* dest, const CONTEXT* src, DWORD ContextFlags)
 {
-	// NO IMPLEMENTATION
-	assert(false);
+	if ((ContextFlags & CONTEXT_INTEGER) == CONTEXT_INTEGER)
+	{
+		dest->Rax = src->Rax;
+		dest->Rbx = src->Rbx;
+		dest->Rcx = src->Rcx;
+		dest->Rdx = src->Rdx;
+		dest->Rsi = src->Rsi;
+		dest->Rdi = src->Rdi;
+		dest->Rbp = src->Rbp;
+		dest->R8 = src->R8;
+		dest->R9 = src->R9;
+		dest->R10 = src->R10;
+		dest->R11 = src->R11;
+		dest->R12 = src->R12;
+		dest->R13 = src->R13;
+		dest->R14 = src->R14;
+		dest->R15 = src->R15;
+	}
+
+	if ((ContextFlags & CONTEXT_FLOATING_POINT) == CONTEXT_FLOATING_POINT) {
+		dest->Xmm0 = src->Xmm0;
+		dest->Xmm1 = src->Xmm1;
+		dest->Xmm2 = src->Xmm2;
+		dest->Xmm3 = src->Xmm3;
+		dest->Xmm4 = src->Xmm4;
+		dest->Xmm5 = src->Xmm5;
+		dest->Xmm6 = src->Xmm6;
+		dest->Xmm7 = src->Xmm7;
+		dest->Xmm8 = src->Xmm8;
+		dest->Xmm9 = src->Xmm9;
+		dest->Xmm10 = src->Xmm10;
+		dest->Xmm11 = src->Xmm11;
+		dest->Xmm12 = src->Xmm12;
+		dest->Xmm13 = src->Xmm13;
+		dest->Xmm14 = src->Xmm14;
+		dest->Xmm15 = src->Xmm15;
+	}
+
+	if ((ContextFlags & CONTEXT_CONTROL) == CONTEXT_CONTROL) {
+		/* EBP, EIP and EFLAGS */
+		dest->Rbp = src->Rbp;
+		dest->Rip = src->Rip;
+		dest->EFlags = src->EFlags;
+		dest->SegCs = src->SegCs;
+		dest->SegSs = src->SegSs;
+		dest->Rsp = src->Rsp;
+	}
+
+	if ((ContextFlags & CONTEXT_SEGMENTS) == CONTEXT_SEGMENTS) {
+		dest->SegGs = src->SegGs;
+		dest->SegFs = src->SegFs;
+		dest->SegEs = src->SegEs;
+		dest->SegDs = src->SegDs;
+	}
+
+	if ((ContextFlags & CONTEXT_DEBUG_REGISTERS) == CONTEXT_DEBUG_REGISTERS) {
+		dest->Dr0 = src->Dr0;
+		dest->Dr1 = src->Dr1;
+		dest->Dr2 = src->Dr2;
+		dest->Dr3 = src->Dr3;
+		dest->Dr6 = src->Dr6;
+		dest->Dr7 = src->Dr7;
+	}
 }
 
-#else
+#else // #ifdef _M_X64
+
 void cloneThreadContext(CONTEXT* dest, const CONTEXT* src, DWORD ContextFlags)
 {
 	// no extended registers && floating point registers
@@ -231,7 +293,8 @@ void cloneThreadContext(CONTEXT* dest, const CONTEXT* src, DWORD ContextFlags)
 		memcpy(dest->ExtendedRegisters, src->ExtendedRegisters, sizeof(src->ExtendedRegisters));
 	}
 }
-#endif
+
+#endif // #ifdef _M_X64
 
 DWORD WINAPI GetThreadIdFromHandle(HANDLE hThread)
 {
@@ -257,5 +320,5 @@ DWORD WINAPI GetThreadIdFromHandle(HANDLE hThread)
 	if (ntStatus != 0)
 		return 0;
 
-	return bi.ClientId.UniqueThread;
+	return (DWORD )bi.ClientId.UniqueThread;
 }

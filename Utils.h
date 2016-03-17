@@ -55,8 +55,8 @@ typedef union _LDR_DLL_NOTIFICATION_DATA {
 typedef ULONG KPRIORITY;
 
 typedef struct _CLIENT_ID {
-	DWORD   UniqueProcess;
-	DWORD   UniqueThread;
+	ULONG_PTR   UniqueProcess;
+	ULONG_PTR   UniqueThread;
 } CLIENT_ID;
 typedef   CLIENT_ID   *PCLIENT_ID;
 

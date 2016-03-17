@@ -128,7 +128,7 @@ BOOL WINAPI XDbgReadFile(IN HANDLE hFile, IN LPVOID lpBuffer, IN DWORD nNumberOf
 		* check that case either and crashes (only after the operation
 		* completed).
 		*/
-		*lpNumberOfBytesRead = Iosb.Information;
+		*lpNumberOfBytesRead = (DWORD )Iosb.Information;
 	}
 	else
 	{
@@ -169,7 +169,7 @@ BOOL WINAPI XDbgWriteFile(IN HANDLE hFile, IN LPCVOID lpBuffer, IN DWORD nNumber
 		* check that case either and crashes (only after the operation
 		* completed).
 		*/
-		*lpNumberOfBytesWritten = Iosb.Information;
+		*lpNumberOfBytesWritten = (DWORD )Iosb.Information;
 	}
 	else
 	{
