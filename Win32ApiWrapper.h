@@ -1,6 +1,9 @@
 #pragma once
 
+#define MAX_FUNCTION_SIZE		64
+
 BOOL InitWin32ApiWrapper();
+void UninitWin32ApiWrapper();
 
 BOOL WINAPI XDbgReadFile(IN HANDLE hFile, IN LPVOID lpBuffer, IN DWORD nNumberOfBytesToRead,
 	OUT LPDWORD lpNumberOfBytesRead OPTIONAL, IN LPOVERLAPPED lpOverlapped OPTIONAL);

@@ -52,19 +52,29 @@ NTSTATUS
 *NtClose)(IN HANDLE Handle) = NULL;
 
 CloneFuncDef nativeApiDefs[] = {
-	{ "ntdll.dll", "NtReadFile", (void** )&NtReadFile },
-	{ "ntdll.dll", "NtWriteFile", (void**)&NtWriteFile },
-	{ "ntdll.dll", "NtSuspendThread", (void**)&NtSuspendThread },
-	{ "ntdll.dll", "NtResumeThread", (void**)&NtResumeThread },
-	{ "ntdll.dll", "NtWaitForSingleObject", (void**)&NtWaitForSingleObject },
+	{ "ntdll.dll", "NtReadFile", (void**)&NtReadFile, MAX_FUNCTION_SIZE },
+	{ "ntdll.dll", "NtWriteFile", (void**)&NtWriteFile, MAX_FUNCTION_SIZE },
+	{ "ntdll.dll", "NtSuspendThread", (void**)&NtSuspendThread, MAX_FUNCTION_SIZE },
+	{ "ntdll.dll", "NtResumeThread", (void**)&NtResumeThread, MAX_FUNCTION_SIZE },
+	{ "ntdll.dll", "NtWaitForSingleObject", (void**)&NtWaitForSingleObject, MAX_FUNCTION_SIZE },
 	// { "ntdll.dll", "NtOpenThread", (void**)&NtOpenThread }, 
-	{ "ntdll.dll", "NtClose", (void**)&NtClose },
+	{ "ntdll.dll", "NtClose", (void**)&NtClose, MAX_FUNCTION_SIZE },
 };
 
-
+static PVOID funcsBase = NULL;
+static size_t funcsSize;
 BOOL InitWin32ApiWrapper()
 {
-	return CloneFunctions(nativeApiDefs, sizeof(nativeApiDefs) / sizeof(nativeApiDefs[0]));
+	funcsBase = CloneFunctions(nativeApiDefs, sizeof(nativeApiDefs) / sizeof(nativeApiDefs[0]), &funcsSize);
+	return funcsBase  != NULL;
+}
+
+void UninitWin32ApiWrapper()
+{
+	if (funcsBase) {
+		VirtualFree(funcsBase, 0, MEM_RELEASE);
+		funcsBase = NULL;
+	}
 }
 
 typedef struct _IO_STATUS_BLOCK {
