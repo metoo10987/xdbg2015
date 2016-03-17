@@ -16,6 +16,7 @@ private:
 
 public:
 	bool initialize(); // ≥ı ºªØ
+	void stop();
 	static XDbgProxy& instance()
 	{
 		static XDbgProxy inst;
@@ -65,4 +66,6 @@ protected:
 	volatile int			_stopFlag;
 	typedef std::list<DebugEventPacket> DbgEvtPkgs;
 	DbgEvtPkgs				_pendingEvents;
+	PVOID					_vehCookie;
+	PVOID					_dllNotifCooike;
 };

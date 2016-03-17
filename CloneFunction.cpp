@@ -2,31 +2,40 @@
 #include "CloneFunction.h"
 #include <assert.h>
 
-bool CloneFunctions(const CloneFuncDef defs[], size_t count)
+PVOID CloneFunctions(const CloneFuncDef defs[], size_t count, size_t* funcsSize)
 {
-	PVOID base = VirtualAlloc(NULL, MAX_FUNCTION_SIZE * count, MEM_COMMIT, 
-		PAGE_EXECUTE_READWRITE);
+	size_t memSize = 0;
+	for (size_t i = 0; i < count; i++) {
+		memSize += defs[i].funcSize;
+	}
+
+	PVOID base = VirtualAlloc(NULL, memSize, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+
 	if (base == NULL)
 		return false;
+	char* pos = (char *)base;
 	for (size_t i = 0; i < count; i++) {
 		HMODULE hMod = LoadLibrary(defs[i].modName);
 		if (hMod == NULL) {
-			VirtualFree(base, MAX_FUNCTION_SIZE * count, MEM_RELEASE);
+			VirtualFree(base, 0, MEM_RELEASE);
 			assert(false);
-			return false;
+			return NULL;
 		}
 
-		PVOID funcAddr = PVOID(ULONG(base) + MAX_FUNCTION_SIZE * i);
-		if (!CloneFunction(hMod, defs[i].funcName, funcAddr, MAX_FUNCTION_SIZE)) {
-			VirtualFree(base, MAX_FUNCTION_SIZE * count, MEM_RELEASE);
+		PVOID funcAddr = pos;
+		if (!CloneFunction(hMod, defs[i].funcName, funcAddr, defs[i].funcSize)) {
+			VirtualFree(base, 0, MEM_RELEASE);
 			assert(false);
-			return false;
+			return NULL;
 		}
 
 		*defs[i].funcAddr = funcAddr;
+		pos += defs[i].funcSize;
 	}
 
-	return true;
+	if (funcsSize)
+		*funcsSize = memSize;
+	return base;
 }
 
 bool CloneFunction(HMODULE hMod, const char* funcName, void* funcAddr, size_t size)

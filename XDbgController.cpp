@@ -7,6 +7,8 @@
 #include "detours.h"
 #include <vector>
 
+extern UINT debug_if;
+
 std::vector<AutoDebug* > autoDebugHandlers;
 
 //////////////////////////////////////////////////////////////////////////
@@ -313,7 +315,10 @@ BOOL __stdcall Mine_CreateProcessA(LPCSTR a0,
 	LPPROCESS_INFORMATION a9)
 {
 	MyTrace("%s()", __FUNCTION__);
-	
+
+	if (debug_if == 1)
+		return Real_CreateProcessA(a0, a1, a2, a3, a4, dwCreationFlags, a6, a7, a8, a9);
+
 	XDbgController& dbgctl = XDbgController::instance();
 
 	DWORD flags = dwCreationFlags;
@@ -362,6 +367,10 @@ BOOL __stdcall Mine_CreateProcessW(LPCWSTR a0,
 	LPPROCESS_INFORMATION a9)
 {
 	MyTrace("%s()", __FUNCTION__);
+	
+	if (debug_if == 1)
+		return Real_CreateProcessW(a0, a1, a2, a3, a4, dwCreationFlags, a6, a7, a8, a9);
+
 	DWORD flags = dwCreationFlags;
 	XDbgController& dbgctl = XDbgController::instance();
 
@@ -401,6 +410,9 @@ BOOL __stdcall Mine_CreateProcessW(LPCWSTR a0,
 BOOL __stdcall Mine_DebugActiveProcess(DWORD a0)
 {
 	MyTrace("%s()", __FUNCTION__);
+	if (debug_if == 1)
+		return Real_DebugActiveProcess(a0);
+
 	XDbgController& dbgctl = XDbgController::instance();
 	if (injectDll(a0, dbgctl.getModuleHandle()))
 		return dbgctl.attach(a0, GetProcessMainThread(a0)) ? TRUE : FALSE;
@@ -411,6 +423,9 @@ BOOL __stdcall Mine_DebugActiveProcess(DWORD a0)
 BOOL __stdcall Mine_DebugActiveProcessStop(DWORD a0)
 {
 	MyTrace("%s()", __FUNCTION__);
+	if (debug_if == 1)
+		return Real_DebugActiveProcessStop(a0);
+
 	XDbgController& dbgctl = XDbgController::instance();
 	return dbgctl.stop(a0);
 }
@@ -490,6 +505,10 @@ BOOL __stdcall Mine_WaitForDebugEvent(LPDEBUG_EVENT a0,
 	DWORD a1)
 {
 	MyTrace("%s(%p, %u)", __FUNCTION__, a0, a1);
+
+	if (debug_if == 1)
+		return Real_WaitForDebugEvent(a0, a1);
+
 	BOOL result;
 	bool ignore;
 
@@ -524,6 +543,9 @@ BOOL __stdcall Mine_ContinueDebugEvent(DWORD a0,
 	DWORD a2)
 {
 	MyTrace("%s(%u, %u, %x)", __FUNCTION__, a0, a1, a2);
+	if (debug_if == 1)
+		return Real_ContinueDebugEvent(a0, a1, a2);
+
 	return XDbgController::instance().continueEvent(a0, a1, a2) ? TRUE : FALSE;
 }
 
@@ -531,6 +553,9 @@ BOOL __stdcall Mine_SetThreadContext(HANDLE a0,
 	CONTEXT* a1)
 {
 	MyTrace("%s(%p, %p)", __FUNCTION__, a0, a1);
+	if (debug_if == 1)
+		return Real_SetThreadContext(a0, a1);
+
 	XDbgController& dbgctl = XDbgController::instance();
 	return dbgctl.setThreadContext(a0, a1) ? TRUE: FALSE;
 }
@@ -539,6 +564,9 @@ BOOL __stdcall Mine_GetThreadContext(HANDLE a0,
 	LPCONTEXT a1)
 {
 	// MyTrace("%s(%p, %p)", __FUNCTION__, a0, a1);
+	if (debug_if == 1)
+		return Real_GetThreadContext(a0, a1);
+
 	XDbgController& dbgctl = XDbgController::instance();
 	if (!dbgctl.getThreadContext(a0, a1))
 		return FALSE;

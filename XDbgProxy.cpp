@@ -19,6 +19,7 @@ XDbgProxy::XDbgProxy(void)
 
 	_lastExceptCode = 0;
 	_lastExceptAddr = 0;
+	_vehCookie = NULL;
 }
 
 XDbgProxy::~XDbgProxy(void)
@@ -127,7 +128,8 @@ bool XDbgProxy::initialize()
 	if (!createPipe())
 		return false;
 
-	if (AddVectoredExceptionHandler(1, &XDbgProxy::_VectoredHandler) == NULL)
+	_vehCookie = AddVectoredExceptionHandler(1, &XDbgProxy::_VectoredHandler);
+	if (_vehCookie == NULL)
 		return false;
 
 	typedef VOID (CALLBACK *PLDR_DLL_NOTIFICATION_FUNCTION)(ULONG, PCLDR_DLL_NOTIFICATION_DATA, PVOID);
@@ -135,20 +137,45 @@ bool XDbgProxy::initialize()
 	LdrRegDllNotifFunc LdrRegisterDllNotification = (LdrRegDllNotifFunc )GetProcAddress(
 		GetModuleHandle("ntdll.dll"), "LdrRegisterDllNotification");
 	if (LdrRegisterDllNotification) {
-		PVOID cookie;
-		if (LdrRegisterDllNotification(0, &XDbgProxy::_LdrDllNotification, NULL, &cookie) != 0) {
+		
+		if (LdrRegisterDllNotification(0, &XDbgProxy::_LdrDllNotification, NULL, &_dllNotifCooike) != 0) {
 			// log error
 			assert(false);			
 		}
 	}
 
 	MyTrace("%s(): starting thread.", __FUNCTION__);
+	_stopFlag = false;
 	if (!start()) {
 		assert(false);
 		return false;
 	}
 	
 	return true;
+}
+
+// FIXME: it's not always right. Thread::stop might hang.
+void XDbgProxy::stop()
+{
+	assert(false);
+
+	_stopFlag = true;
+	Thread::stop(-1); // stop xdbg thread
+	typedef NTSTATUS (NTAPI *LdrUnregDllNotifFunc)(PVOID Cookie);
+	LdrUnregDllNotifFunc LdrUnregisterDllNotification = (LdrUnregDllNotifFunc)GetProcAddress(
+		GetModuleHandle("ntdll.dll"), "LdrUnregisterDllNotification");
+	if (LdrUnregisterDllNotification) {
+		LdrUnregisterDllNotification(_dllNotifCooike);
+		_dllNotifCooike = NULL;
+	}
+
+	RemoveVectoredExceptionHandler(_vehCookie);
+	_vehCookie = NULL;
+	UninitWin32ApiWrapper();
+	if (_hPipe) {
+		CloseHandle(_hPipe);
+		_hPipe = NULL;
+	}
 }
 
 LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
