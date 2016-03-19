@@ -215,6 +215,10 @@ void cloneThreadContext(CONTEXT* dest, const CONTEXT* src, DWORD ContextFlags)
 		dest->Xmm13 = src->Xmm13;
 		dest->Xmm14 = src->Xmm14;
 		dest->Xmm15 = src->Xmm15;
+
+		dest->MxCsr = src->MxCsr;
+		dest->FltSave.MxCsr = src->FltSave.MxCsr;
+		dest->FltSave.ControlWord = src->FltSave.ControlWord;
 	}
 
 	if ((ContextFlags & CONTEXT_CONTROL) == CONTEXT_CONTROL) {
@@ -241,7 +245,13 @@ void cloneThreadContext(CONTEXT* dest, const CONTEXT* src, DWORD ContextFlags)
 		dest->Dr3 = src->Dr3;
 		dest->Dr6 = src->Dr6;
 		dest->Dr7 = src->Dr7;
+
+		dest->LastBranchToRip = src->LastBranchToRip;
+		dest->LastBranchFromRip = src->LastBranchFromRip;
+		dest->LastExceptionToRip = src->LastExceptionToRip;
+		dest->LastExceptionFromRip = src->LastExceptionFromRip;
 	}
+	
 }
 
 #else // #ifdef _M_X64
