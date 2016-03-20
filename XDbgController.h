@@ -26,6 +26,13 @@ public:
 	bool setThreadContext(HANDLE hThread, const CONTEXT* ctx);
 	bool getThreadContext(HANDLE hThread, CONTEXT* ctx);
 
+	void* allocMemroy(size_t size, DWORD allocType, DWORD protect);
+	bool freeMemory(LPVOID lpAddress, size_t dwSize, DWORD  dwFreeType);
+	bool setMemoryProtection(LPVOID lpAddress, size_t dwSize, DWORD flNewProtect, PDWORD lpflOldProtect);
+	size_t queryMemory(LPCVOID lpAddress, PMEMORY_BASIC_INFORMATION lpBuffer, size_t dwLength);
+	bool readMemory(LPCVOID lpBaseAddress, PVOID lpBuffer, size_t nSize, size_t * lpNumberOfBytesRead);
+	bool writeMemory(LPVOID lpBaseAddress, LPCVOID lpBuffer, size_t nSize, size_t * lpNumberOfBytesWritten);
+
 	DWORD getEventCode() const
 	{
 		return _event.event.dwDebugEventCode;

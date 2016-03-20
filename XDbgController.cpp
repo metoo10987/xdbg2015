@@ -302,6 +302,46 @@ BOOL(__stdcall * Real_SetThreadContext)(HANDLE a0,
 	CONST CONTEXT* a1)
 	= SetThreadContext;
 
+LPVOID(__stdcall * Real_VirtualAllocEx)(HANDLE a0,
+	LPVOID a1,
+	SIZE_T a2,
+	DWORD a3,
+	DWORD a4)
+	= VirtualAllocEx;
+
+BOOL(__stdcall * Real_VirtualFreeEx)(HANDLE a0,
+	LPVOID a1,
+	SIZE_T a2,
+	DWORD a3)
+	= VirtualFreeEx;
+
+BOOL(__stdcall * Real_VirtualProtectEx)(HANDLE a0,
+	LPVOID a1,
+	SIZE_T a2,
+	DWORD a3,
+	PDWORD a4)
+	= VirtualProtectEx;
+
+DWORD_PTR(__stdcall * Real_VirtualQueryEx)(HANDLE a0,
+	LPCVOID a1,
+	PMEMORY_BASIC_INFORMATION a2,
+	DWORD_PTR a3)
+	= VirtualQueryEx;
+
+BOOL(__stdcall * Real_ReadProcessMemory)(HANDLE a0,
+	LPCVOID a1,
+	LPVOID a2,
+	DWORD_PTR a3,
+	PDWORD_PTR a4)
+	= ReadProcessMemory;
+
+BOOL(__stdcall * Real_WriteProcessMemory)(HANDLE a0,
+	LPVOID a1,
+	LPCVOID a2,
+	DWORD_PTR a3,
+	PDWORD_PTR a4)
+	= WriteProcessMemory;
+
 //////////////////////////////////////////////////////////////////////////
 BOOL __stdcall Mine_CreateProcessA(LPCSTR a0,
 	LPSTR a1,
@@ -570,7 +610,7 @@ BOOL __stdcall Mine_GetThreadContext(HANDLE a0,
 	XDbgController& dbgctl = XDbgController::instance();
 	if (!dbgctl.getThreadContext(a0, a1))
 		return FALSE;
-	
+#if 0
 	if ((dbgctl.getContextFlags() & CONTEXT_CONTROL) != CONTEXT_CONTROL) {
 		if (dbgctl.getExceptCode() == STATUS_BREAKPOINT) {		
 			// CTX_PC_REG(a1) = (DWORD)dbgctl.getExceptAddress() + 1;
@@ -579,7 +619,7 @@ BOOL __stdcall Mine_GetThreadContext(HANDLE a0,
 			// CTX_PC_REG(a1) = (DWORD)dbgctl.getExceptAddress();
 		} */
 	}
-
+#endif
 	return TRUE;
 }
 
@@ -637,6 +677,13 @@ bool XDbgController::getThreadContext(HANDLE hThread, CONTEXT* ctx)
 
 		if (threadId == currentThreadId && getEventCode() == EXCEPTION_DEBUG_EVENT) {
 			cloneThreadContext(ctx, &_event.ctx, ctx->ContextFlags);
+
+			if ((getContextFlags() & CONTEXT_CONTROL) != CONTEXT_CONTROL) {
+				if (getExceptCode() == STATUS_BREAKPOINT) {
+					CTX_PC_REG(ctx) = CTX_PC_REG(ctx) + 1;
+				}
+			}
+
 			return true;
 		}
 
@@ -648,4 +695,89 @@ bool XDbgController::getThreadContext(HANDLE hThread, CONTEXT* ctx)
 void registerAutoDebugHandler(AutoDebug* handler)
 {
 	autoDebugHandlers.push_back(handler);
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+void* XDbgController::allocMemroy(size_t size, DWORD allocType, DWORD protect)
+{
+	return NULL;
+}
+
+bool XDbgController::freeMemory(LPVOID lpAddress, size_t dwSize, DWORD  dwFreeType)
+{
+	return NULL;
+}
+
+bool XDbgController::setMemoryProtection(LPVOID lpAddress, size_t dwSize, DWORD flNewProtect, PDWORD lpflOldProtect)
+{
+	return NULL;
+}
+
+size_t XDbgController::queryMemory(LPCVOID lpAddress, PMEMORY_BASIC_INFORMATION lpBuffer, size_t dwLength)
+{
+	return NULL;
+}
+
+bool XDbgController::readMemory(LPCVOID lpBaseAddress, PVOID lpBuffer, size_t nSize, size_t * lpNumberOfBytesRead)
+{
+	return NULL;
+}
+
+bool XDbgController::writeMemory(LPVOID lpBaseAddress, LPCVOID lpBuffer, size_t nSize, size_t * lpNumberOfBytesWritten)
+{
+	return NULL;
+}
+
+LPVOID __stdcall Mine_VirtualAllocEx(HANDLE a0,
+	LPVOID a1,
+	SIZE_T a2,
+	DWORD a3,
+	DWORD a4)
+{
+	return NULL;
+}
+
+BOOL __stdcall Mine_VirtualFreeEx(HANDLE a0,
+	LPVOID a1,
+	SIZE_T a2,
+	DWORD a3)
+{
+	return NULL;
+}
+
+BOOL __stdcall Mine_VirtualProtectEx(HANDLE a0,
+	LPVOID a1,
+	SIZE_T a2,
+	DWORD a3,
+	PDWORD a4)
+{
+
+	return NULL;
+}
+
+DWORD_PTR __stdcall Mine_VirtualQueryEx(HANDLE a0,
+	LPCVOID a1,
+	PMEMORY_BASIC_INFORMATION a2,
+	DWORD_PTR a3)
+{
+	return NULL;
+}
+
+BOOL __stdcall Mine_ReadProcessMemory(HANDLE a0,
+	LPCVOID a1,
+	LPVOID a2,
+	DWORD_PTR a3,
+	PDWORD_PTR a4)
+{
+	return NULL;
+}
+
+BOOL __stdcall Mine_WriteProcessMemory(HANDLE a0,
+	LPVOID a1,
+	LPVOID a2,
+	DWORD_PTR a3,
+	PDWORD_PTR a4)
+{
+	return NULL;
 }
