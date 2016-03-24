@@ -24,16 +24,28 @@ static inline std::string makePipeName(DWORD pid)
 #define CONTINUE_MESSAGE_SIZE	sizeof(DebugAckPacket)
 
 struct DebugEventPacket {
-	DEBUG_EVENT		event;
-	CONTEXT			ctx;
+	union {
+		struct {
+			DEBUG_EVENT		event;
+			CONTEXT			ctx;
+		};
+
+		// ANOTHER MEMBER;
+	};
 };
 
 struct DebugAckPacket {
-	DWORD	dwProcessId;
-	DWORD	dwThreadId;
-	DWORD	dwContinueStatus;
-	CONTEXT	ctx;
-	DWORD	ContextFlags;
+	union {
+		struct {
+			DWORD	dwProcessId;
+			DWORD	dwThreadId;
+			DWORD	dwContinueStatus;
+			CONTEXT	ctx;
+			DWORD	ContextFlags;
+		};
+
+		// ANOTHER MEMBER;
+	};
 };
 
 void _MyTrace(LPCSTR fmt, ...);

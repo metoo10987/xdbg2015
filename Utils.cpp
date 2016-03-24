@@ -52,7 +52,7 @@ BOOL injectDll(DWORD pid, HMODULE hInst)
 	}
 
 	if (!LoadRemoteDll(pid, dllPath)) {
-		assert(false);
+		// assert(false);
 		MyTrace("injectDll(%u) failed", pid);
 		return FALSE;
 	}

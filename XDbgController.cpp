@@ -342,6 +342,21 @@ BOOL(__stdcall * Real_WriteProcessMemory)(HANDLE a0,
 	PDWORD_PTR a4)
 	= WriteProcessMemory;
 
+/* DWORD(WINAPI * Real_GetModuleFileNameExW)(HANDLE hProcess,
+	HMODULE hModule,
+	LPWSTR lpFilename,
+	DWORD nSize)
+	= GetModuleFileNameExW; */
+
+NTSTATUS(NTAPI * Real_NtQueryInformationProcess)(
+	HANDLE ProcessHandle,
+	ULONG_PTR ProcessInformationClass,
+	PVOID ProcessInformation,
+	ULONG ProcessInformationLength,
+	PULONG ReturnLength)
+	= (NTSTATUS(NTAPI * )(HANDLE, ULONG_PTR, PVOID, ULONG, PULONG))
+	GetProcAddress(GetModuleHandle("ntdll.dll"), "NtQueryInformationProcess");
+
 //////////////////////////////////////////////////////////////////////////
 BOOL __stdcall Mine_CreateProcessA(LPCSTR a0,
 	LPSTR a1,
@@ -454,10 +469,11 @@ BOOL __stdcall Mine_DebugActiveProcess(DWORD a0)
 		return Real_DebugActiveProcess(a0);
 
 	XDbgController& dbgctl = XDbgController::instance();
-	if (injectDll(a0, dbgctl.getModuleHandle()))
-		return dbgctl.attach(a0, GetProcessMainThread(a0)) ? TRUE : FALSE;
-	else
-		return FALSE;
+	if (!injectDll(a0, dbgctl.getModuleHandle())) {
+		MyTrace("%s(): injectDll() failed.", __FUNCTION__);
+	}
+
+	return dbgctl.attach(a0, GetProcessMainThread(a0)) ? TRUE : FALSE;
 }
 
 BOOL __stdcall Mine_DebugActiveProcessStop(DWORD a0)
@@ -780,4 +796,25 @@ BOOL __stdcall Mine_WriteProcessMemory(HANDLE a0,
 	PDWORD_PTR a4)
 {
 	return NULL;
+}
+
+/*
+DWORD WINAPI Mine_GetModuleFileNameExW)(HANDLE hProcess,
+HMODULE hModule,
+LPWSTR lpFilename,
+DWORD nSize)
+{
+
+}
+*/
+
+NTSTATUS NTAPI Mine_NtQueryInformationProcess(
+	HANDLE ProcessHandle,
+	ULONG_PTR ProcessInformationClass,
+	PVOID ProcessInformation,
+	ULONG ProcessInformationLength,
+	PULONG ReturnLength)
+
+{
+	return 0;
 }
