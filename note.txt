@@ -3,3 +3,6 @@
 1 清理完善优化代码
 2 waitdebugevent支持timeout
 3 用native api代替 xdbgproxy中的所有win32 api， 防止调试时产生冲突
+
+
+有一个想法是通过com把所有的请求转发到 inferior 处理

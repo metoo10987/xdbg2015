@@ -80,10 +80,14 @@ bool XDbgController::attach(DWORD pid, DWORD tid)
 
 bool XDbgController::stop(DWORD pid)
 {
-	assert(_pid = pid);
+	assert(_pid == pid);
 
 	if (_hProcess == NULL)
 		return false;
+
+	if (getEventCode() != 0) {
+		continueEvent(pid, getEventThreadId(), DBG_CONTINUE);
+	}
 
 	if (_hProcess) {
 		CloseHandle(_hProcess);
