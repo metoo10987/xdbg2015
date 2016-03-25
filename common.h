@@ -16,7 +16,14 @@ void* CastProcAddr(T p)
 static inline std::string makePipeName(DWORD pid)
 {
 	char buf[256];
-	sprintf_s(buf, "\\\\.\\pipe\\__xdbg__%u__", pid);
+	sprintf_s(buf, "\\\\.\\pipe\\__XDBG__%u__", pid);
+	return buf;
+}
+
+static inline std::string makeApiPipeName(DWORD pid)
+{
+	char buf[256];
+	sprintf_s(buf, "\\\\.\\pipe\\__XDBGAPI__%u__", pid);
 	return buf;
 }
 
@@ -61,3 +68,51 @@ void _MyTrace(LPCSTR fmt, ...);
 
 #define ATTACHED_EVENT	(RIP_EVENT + 1)
 #define LAST_EVENT		ATTACHED_EVENT
+
+//////////////////////////////////////////////////////////////////////////
+// Remote API
+#define MAX_MEMORY_BLOCK				(256)
+
+#define ID_ReadProcessMemory			(0x00000001)
+#define ID_WriteProcessMemory			(0x00000002)
+
+
+#define CALL_MESSAGE_SIZE		sizeof(ApiCallPacket)
+#define RETURN_MESSAGE_SIZE		sizeof(ApiReturnPakcet)
+
+struct ApiCallPacket {
+	
+	DWORD			apiId;
+
+	union {
+		struct {
+			PVOID		addr;
+			SIZE_T		size;
+		} ReadProcessMemory;
+
+		struct {
+			PVOID		addr;
+			UCHAR		buffer[MAX_MEMORY_BLOCK];
+			SIZE_T		size;
+		} WriteProcessMemory;
+	};
+};
+
+struct ApiReturnPakcet {
+	
+	DWORD		lastError;
+	union {
+		struct  {
+			BOOL		result;
+			UCHAR		buffer[MAX_MEMORY_BLOCK];
+			SIZE_T		size;
+		} ReadProcessMemory;
+
+		struct  {
+			BOOL		result;
+			SIZE_T		writtenSize;
+		} WriteProcessMemory;
+	};	
+};
+
+//////////////////////////////////////////////////////////////////////////

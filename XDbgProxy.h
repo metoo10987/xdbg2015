@@ -8,7 +8,7 @@
 #include "common.h"
 #include "ThreadMgr.h"
 
-class XDbgProxy : public Thread, public ThreadMgr, protected Mutex
+class XDbgProxy : protected Thread, public ThreadMgr, protected Mutex
 {
 private:
 	XDbgProxy(void);
@@ -43,6 +43,7 @@ protected:
 	bool createPipe();
 
 	virtual long run();
+	virtual long runApiLoop();
 
 	BOOL sendDbgEvent(const DebugEventPacket& event);
 	BOOL recvDbgAck(struct DebugAckPacket& ack);
@@ -57,6 +58,35 @@ protected:
 	void sendModuleInfo(DWORD firstThread);
 	void sendThreadInfo();
 
+	//////////////////////////////////////////////////////////////////////////
+	// REMOTE API
+	class ApiThread : public Thread {
+	public:
+		ApiThread(XDbgProxy& parent) : _parent(parent)
+		{
+
+		}
+
+	protected:
+		virtual long run()
+		{
+			return _parent.runApiLoop();
+		}
+
+		XDbgProxy&		_parent;
+	};
+
+	BOOL recvApiCall(ApiCallPacket& inPkt);
+	BOOL sendApiReturn(const ApiReturnPakcet& outPkt);
+
+	typedef void(XDbgProxy::* RemoteApiHandler)(ApiCallPacket& inPkt);
+
+	void registerRemoteApi();
+
+	void ReadProcessMemory(ApiCallPacket& inPkt);
+	void WriteProcessMemory(ApiCallPacket& inPkt);
+	//////////////////////////////////////////////////////////////////////////
+
 protected:
 	HANDLE					_hPipe;
 	volatile bool			_attached;
@@ -68,4 +98,11 @@ protected:
 	DbgEvtPkgs				_pendingEvents;
 	PVOID					_vehCookie;
 	PVOID					_dllNotifCooike;
+
+	HANDLE					_hApiPipe;
+	ApiThread				_apiThread;
+
+	typedef std::map<DWORD, RemoteApiHandler> RemoteApiHandlers;
+
+	RemoteApiHandlers		_apiHandlers;
 };

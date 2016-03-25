@@ -15,7 +15,7 @@
 HMODULE hInstance;
 UINT exec_mode = 0;
 UINT debug_if = 0;
-
+UINT api_hook_mask = ID_ReadProcessMemory | ID_WriteProcessMemory;
 // XDbgController* dbgctl = NULL;
 
 //////////////////////////////////////////////////////////////////////////

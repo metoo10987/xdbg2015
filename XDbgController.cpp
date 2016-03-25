@@ -8,6 +8,7 @@
 #include <vector>
 
 extern UINT debug_if;
+extern UINT api_hook_mask;
 
 std::vector<AutoDebug* > autoDebugHandlers;
 
@@ -17,6 +18,7 @@ XDbgController::XDbgController(void)
 {
 	_pid = 0;
 	_hPipe = INVALID_HANDLE_VALUE;
+	_hApiPipe = INVALID_HANDLE_VALUE;
 	_pending = false;
 	_hProcess = NULL;
 	_ContextFlags = 0;
@@ -26,8 +28,7 @@ XDbgController::XDbgController(void)
 
 XDbgController::~XDbgController(void)
 {
-	if (_hPipe != INVALID_HANDLE_VALUE)
-		CloseHandle(_hPipe);
+	disconnectInferior();
 }
 
 bool XDbgController::initialize(HMODULE hInst, bool hookApi)
@@ -38,6 +39,78 @@ bool XDbgController::initialize(HMODULE hInst, bool hookApi)
 	return true;
 }
 
+bool XDbgController::connectInferior(DWORD pid)
+{
+	std::string name = makePipeName(pid);
+	// WaitNamedPipe(name.c_str(), NMPWAIT_WAIT_FOREVER);
+	_hPipe = CreateFile(name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
+		0 /*FILE_FLAG_OVERLAPPED*/, NULL);
+
+	if (_hPipe == INVALID_HANDLE_VALUE) {
+		MyTrace("%s() cannot connect to '%s'(event pipe)", __FUNCTION__, name.c_str());
+		return false;
+	}
+
+	std::string apiName = makeApiPipeName(pid);
+	_hApiPipe = CreateFile(apiName.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
+		0 /*FILE_FLAG_OVERLAPPED*/, NULL);
+
+	if (_hApiPipe == INVALID_HANDLE_VALUE) {
+		MyTrace("%s() cannot connect to '%s'(api pipe)", __FUNCTION__, apiName.c_str());
+		CloseHandle(_hPipe);
+		_hPipe = INVALID_HANDLE_VALUE;
+		return false;
+	}
+
+	MyTrace("%s(): _hPipe = %x, _hApiPipe = %x", __FUNCTION__, _hPipe, _hApiPipe);
+	return true;
+}
+
+void XDbgController::disconnectInferior()
+{
+	if (_hPipe != INVALID_HANDLE_VALUE) {
+		CloseHandle(_hPipe);
+		_hPipe = NULL;
+	}
+
+	if (_hApiPipe != INVALID_HANDLE_VALUE) {
+		CloseHandle(_hApiPipe);
+		_hApiPipe = NULL;
+	}
+}
+
+BOOL XDbgController::sendApiCall(const ApiCallPacket& outPkt)
+{
+	DWORD len;
+	if (!WriteFile(_hApiPipe, &outPkt, sizeof(outPkt), &len, NULL)) {
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+BOOL XDbgController::recvApiReturn(ApiReturnPakcet& inPkt)
+{
+	DWORD len;
+	if (!ReadFile(_hApiPipe, &inPkt, sizeof(inPkt), &len, NULL)) {
+		assert(false);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+BOOL XDbgController::sendApiCall(const ApiCallPacket& outPkt, ApiReturnPakcet& inPkt)
+{
+	// MutexGuard guard(&_apiMutex);
+
+	if (!sendApiCall(outPkt)) {
+		return false;
+	}
+
+	return recvApiReturn(inPkt);
+}
+
 bool XDbgController::attach(DWORD pid, DWORD tid)
 {
 	MyTrace("%s()", __FUNCTION__);
@@ -45,19 +118,14 @@ bool XDbgController::attach(DWORD pid, DWORD tid)
 	if (_pid)
 		stop(_pid);
 
-	std::string name = makePipeName(pid);
-	// WaitNamedPipe(name.c_str(), NMPWAIT_WAIT_FOREVER);
-	_hPipe = CreateFile(name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 
-		0 /*FILE_FLAG_OVERLAPPED*/, NULL);
-
-	if (_hPipe == INVALID_HANDLE_VALUE) {
-		MyTrace("%s() cannot connect to '%s'", __FUNCTION__, name.c_str());
+	if (!connectInferior(pid)) {
+		assert(false);
 		return false;
 	}
 
 	_hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
 	if (_hProcess == NULL ) {
-		CloseHandle(_hPipe);
+		disconnectInferior();
 		MyTrace("%s() OpenProcess(%u)", __FUNCTION__, pid);
 		return false;
 	}
@@ -65,7 +133,7 @@ bool XDbgController::attach(DWORD pid, DWORD tid)
 	DEBUG_EVENT event;
 	if (!waitEvent(&event)) { // SEND FIRST MSG TO VERIFY CONNECTION
 		MyTrace("%s(): connection is unavailable");
-		CloseHandle(_hPipe);
+		disconnectInferior();
 		CloseHandle(_hProcess);
 		assert(false);
 		return false;
@@ -561,6 +629,18 @@ BOOL __stdcall Mine_ContinueDebugEvent(DWORD a0,
 	DWORD a1,
 	DWORD a2);
 
+BOOL __stdcall Mine_ReadProcessMemory(HANDLE a0,
+	LPCVOID a1,
+	LPVOID a2,
+	DWORD_PTR a3,
+	PDWORD_PTR a4);
+
+BOOL __stdcall Mine_WriteProcessMemory(HANDLE a0,
+	LPVOID a1,
+	LPVOID a2,
+	DWORD_PTR a3,
+	PDWORD_PTR a4);
+
 BOOL __stdcall Mine_WaitForDebugEvent(LPDEBUG_EVENT a0,
 	DWORD a1)
 {
@@ -655,6 +735,17 @@ bool XDbgController::hookDbgApi()
 	DetourAttach(&(PVOID&)Real_ContinueDebugEvent, &(PVOID&)Mine_ContinueDebugEvent);
 	DetourAttach(&(PVOID&)Real_GetThreadContext, &(PVOID&)Mine_GetThreadContext);
 	DetourAttach(&(PVOID&)Real_SetThreadContext, &(PVOID&)Mine_SetThreadContext);
+
+	//////////////////////////////////////////////////////////////////////////
+	// optional hooking api
+	if (api_hook_mask & ID_ReadProcessMemory) {
+		DetourAttach(&(PVOID&)Real_ReadProcessMemory, &(PVOID&)Mine_ReadProcessMemory);
+	}
+
+	if (api_hook_mask & ID_WriteProcessMemory) {
+		DetourAttach(&(PVOID&)Real_WriteProcessMemory, &(PVOID&)Mine_WriteProcessMemory);
+	}
+
 	return DetourTransactionCommit() == NO_ERROR;
 }
 
@@ -739,14 +830,56 @@ size_t XDbgController::queryMemory(LPCVOID lpAddress, PMEMORY_BASIC_INFORMATION 
 	return NULL;
 }
 
-bool XDbgController::readMemory(LPCVOID lpBaseAddress, PVOID lpBuffer, size_t nSize, size_t * lpNumberOfBytesRead)
+bool XDbgController::readMemory(LPCVOID lpBaseAddress, PVOID lpBuffer, size_t nSize, 
+	size_t * lpNumberOfBytesRead)
 {
-	return NULL;
+	// FIXME: when the size is bigger MAX_MEMORY_BLOCK
+	assert(nSize <= MAX_MEMORY_BLOCK);
+
+	MyTrace("%s() addr: %p, size_t: %x", __FUNCTION__, lpBaseAddress, nSize);
+
+	ApiCallPacket outPkt;
+	ApiReturnPakcet inPkt;
+	outPkt.apiId = ID_ReadProcessMemory;
+	outPkt.ReadProcessMemory.addr = (LPVOID )lpBaseAddress;
+	outPkt.ReadProcessMemory.size = nSize;
+	if (!sendApiCall(outPkt, inPkt)) {
+		assert(false);
+		return false;
+	}
+
+	if (!inPkt.ReadProcessMemory.result)
+		return false;
+
+	memcpy(lpBuffer, inPkt.ReadProcessMemory.buffer, inPkt.ReadProcessMemory.size);
+	*lpNumberOfBytesRead = inPkt.ReadProcessMemory.size;
+	return true;
 }
 
-bool XDbgController::writeMemory(LPVOID lpBaseAddress, LPCVOID lpBuffer, size_t nSize, size_t * lpNumberOfBytesWritten)
+bool XDbgController::writeMemory(LPVOID lpBaseAddress, LPCVOID lpBuffer, size_t nSize, 
+	size_t * lpNumberOfBytesWritten)
 {
-	return NULL;
+	// FIXME: when the size is bigger MAX_MEMORY_BLOCK
+	assert(nSize <= MAX_MEMORY_BLOCK);
+	MyTrace("%s() addr: %p, size_t: %x", __FUNCTION__, lpBaseAddress, nSize);
+
+	ApiCallPacket outPkt;
+	ApiReturnPakcet inPkt;
+	outPkt.apiId = ID_WriteProcessMemory;
+	outPkt.WriteProcessMemory.addr = lpBaseAddress;
+	outPkt.WriteProcessMemory.size = nSize;
+	memcpy(outPkt.WriteProcessMemory.buffer, lpBuffer, nSize);
+
+	if (!sendApiCall(outPkt, inPkt)) {
+		assert(false);
+		return false;
+	}
+
+	if (!inPkt.WriteProcessMemory.result)
+		return false;
+
+	*lpNumberOfBytesWritten = inPkt.WriteProcessMemory.writtenSize;
+	return true;
 }
 
 LPVOID __stdcall Mine_VirtualAllocEx(HANDLE a0,
@@ -790,7 +923,9 @@ BOOL __stdcall Mine_ReadProcessMemory(HANDLE a0,
 	DWORD_PTR a3,
 	PDWORD_PTR a4)
 {
-	return NULL;
+	if (XDbgController::instance().getProcessId() == GetProcessIdFromHandle(a0))
+		return XDbgController::instance().readMemory(a1, a2, a3, (size_t* )a4) ? TRUE: FALSE;
+	return Real_ReadProcessMemory(a0, a1, a2, a3, a4);
 }
 
 BOOL __stdcall Mine_WriteProcessMemory(HANDLE a0,
@@ -799,7 +934,9 @@ BOOL __stdcall Mine_WriteProcessMemory(HANDLE a0,
 	DWORD_PTR a3,
 	PDWORD_PTR a4)
 {
-	return NULL;
+	if (XDbgController::instance().getProcessId() == GetProcessIdFromHandle(a0))
+		return XDbgController::instance().writeMemory(a1, a2, a3, (size_t*)a4) ? TRUE : FALSE;
+	return Real_WriteProcessMemory(a0, a1, a2, a3, a4);
 }
 
 /*

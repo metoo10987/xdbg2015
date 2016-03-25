@@ -76,6 +76,11 @@ public:
 		return _ContextFlags;
 	}
 
+	DWORD getProcessId() const
+	{
+		return _pid;
+	}
+
 protected:
 	void resetDbgEvent()
 	{
@@ -84,6 +89,14 @@ protected:
 	}
 
 	bool hookDbgApi();
+
+	bool connectInferior(DWORD pid);
+	void disconnectInferior();
+
+	BOOL sendApiCall(const ApiCallPacket& outPkt);
+	BOOL sendApiCall(const ApiCallPacket& outPkt, ApiReturnPakcet& inPkt);
+	BOOL recvApiReturn(ApiReturnPakcet& inPkt);
+
 private:
 	XDbgController(void);
 	~XDbgController(void);
@@ -97,6 +110,8 @@ protected:
 	DebugEventPacket	_event;
 	HMODULE				_hInst;
 	DWORD				_ContextFlags;
+	HANDLE				_hApiPipe;
+	Mutex				_apiMutex; // ensuring remote-API is atomic
 };
 
 class AutoDebug

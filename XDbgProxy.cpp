@@ -10,9 +10,10 @@
 #include "Utils.h"
 #include "common.h"
 
-XDbgProxy::XDbgProxy(void)
+XDbgProxy::XDbgProxy(void) : _apiThread(*this)
 {
 	_hPipe = INVALID_HANDLE_VALUE;
+	_hApiPipe = INVALID_HANDLE_VALUE;
 	memset(&_lastException, 0l, sizeof(_lastException));
 	_stopFlag = 0;
 	_attached = false;
@@ -20,6 +21,7 @@ XDbgProxy::XDbgProxy(void)
 	_lastExceptCode = 0;
 	_lastExceptAddr = 0;
 	_vehCookie = NULL;
+	registerRemoteApi();
 }
 
 XDbgProxy::~XDbgProxy(void)
@@ -151,6 +153,11 @@ bool XDbgProxy::initialize()
 		return false;
 	}
 	
+	if (!_apiThread.start()) {
+		assert(false);
+		return false;
+	}
+
 	return true;
 }
 
@@ -258,7 +265,24 @@ bool XDbgProxy::createPipe()
 	_hPipe = ::CreateNamedPipe(name.c_str(), PIPE_ACCESS_DUPLEX, PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT, 
 		PIPE_UNLIMITED_INSTANCES, EVENT_MESSAGE_SIZE, CONTINUE_MESSAGE_SIZE, NMPWAIT_USE_DEFAULT_WAIT, NULL);
 
-	return (_hPipe != INVALID_HANDLE_VALUE);
+	if (_hPipe == INVALID_HANDLE_VALUE)
+		return false;
+
+	std::string apiName = makeApiPipeName(XDbgGetCurrentProcessId());
+	_hApiPipe = ::CreateNamedPipe(apiName.c_str(), PIPE_ACCESS_DUPLEX, PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+		PIPE_UNLIMITED_INSTANCES, RETURN_MESSAGE_SIZE, CALL_MESSAGE_SIZE, NMPWAIT_USE_DEFAULT_WAIT, NULL);
+
+	if (_hApiPipe == INVALID_HANDLE_VALUE) {
+		CloseHandle(_hPipe);
+		_hPipe = INVALID_HANDLE_VALUE;
+		return false;
+	}
+
+	MyTrace("%s(): _hPipe = %x[%d, %d], _hApiPipe = %x[%d, %d]", __FUNCTION__, 
+		_hPipe, EVENT_MESSAGE_SIZE, CONTINUE_MESSAGE_SIZE, 
+		_hApiPipe, RETURN_MESSAGE_SIZE, CALL_MESSAGE_SIZE);
+
+	return true;
 }
 
 // SO, THIS MODULE MUST BE A DLL
@@ -396,6 +420,7 @@ void XDbgProxy::onDbgConnect()
 
 	clearThreads();
 	addAllThreads(XDbgGetCurrentThreadId());
+	delThread(_apiThread.getId());
 	suspendAll(XDbgGetCurrentThreadId());
 
 	DebugEventPacket event;
@@ -412,6 +437,7 @@ void XDbgProxy::onDbgConnect()
 
 void XDbgProxy::onDbgDisconnect()
 {
+	MyTrace("%s()", __FUNCTION__);
 	// MutexGuard guard(this);
 }
 
@@ -536,4 +562,129 @@ void XDbgProxy::sendThreadInfo()
 
 		XDbgCloseHandle(hSnapshot);
 	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+void XDbgProxy::registerRemoteApi()
+{
+	_apiHandlers[ID_ReadProcessMemory] = &XDbgProxy::ReadProcessMemory;
+	_apiHandlers[ID_WriteProcessMemory] = &XDbgProxy::WriteProcessMemory;
+}
+
+BOOL XDbgProxy::recvApiCall(ApiCallPacket& inPkt)
+{
+	DWORD len;
+	if (!ReadFile(_hApiPipe, &inPkt, sizeof(inPkt), &len, NULL)) {
+		assert(false);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+BOOL XDbgProxy::sendApiReturn(const ApiReturnPakcet& outPkt)
+{
+	DWORD len;
+	if (!WriteFile(_hApiPipe, &outPkt, sizeof(outPkt), &len, NULL)) {
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+long XDbgProxy::runApiLoop()
+{	
+	ApiCallPacket inPkt;
+	bool attached = false;
+
+	while (!_stopFlag) {
+		if (!attached) {
+			if (!ConnectNamedPipe(_hApiPipe, NULL)) {				
+				if (GetLastError() != ERROR_PIPE_CONNECTED) {
+					MyTrace("%s(): ConnectNamedPipe() failed.", __FUNCTION__);
+					assert(false);
+					return -1;
+				} else {
+					MyTrace("%s(): attached", __FUNCTION__);
+					attached = true;
+				}
+
+			} else {
+				MyTrace("%s(): attached", __FUNCTION__);
+				attached = true;
+			}
+		}
+
+		if (!recvApiCall(inPkt)) {
+			assert(false);
+			// return -1;
+			attached = false;
+			continue;
+		}
+
+		MyTrace("%s(): ApiCall: id = %d", __FUNCTION__, inPkt.apiId);
+
+		RemoteApiHandlers::iterator it;
+		it = _apiHandlers.find(inPkt.apiId);
+		if (it == _apiHandlers.end()) {
+			assert(false);
+			// return -1;
+			continue;
+		}
+
+		RemoteApiHandler handler = it->second;
+		(this->*handler)(inPkt);
+		MyTrace("%s(): ApiCall: id = %d completed", __FUNCTION__, inPkt.apiId);
+	}
+
+	return 0;
+}
+
+void XDbgProxy::ReadProcessMemory(ApiCallPacket& inPkt)
+{
+	MyTrace("%s()", __FUNCTION__);
+
+	assert(inPkt.ReadProcessMemory.size <= MAX_MEMORY_BLOCK);
+
+	PVOID addr = inPkt.ReadProcessMemory.addr;
+	SIZE_T size = inPkt.ReadProcessMemory.size;
+
+	ApiReturnPakcet outPkt;
+	if (IsBadReadPtr(addr, size)) {
+		outPkt.lastError = ERROR_INVALID_ADDRESS;
+		outPkt.ReadProcessMemory.result = FALSE;
+		sendApiReturn(outPkt);
+		return;
+	}
+
+	memcpy(outPkt.ReadProcessMemory.buffer, addr, size);
+
+	outPkt.lastError = 0;
+	outPkt.ReadProcessMemory.result = TRUE;
+	outPkt.ReadProcessMemory.size = size;
+	sendApiReturn(outPkt);
+}
+
+void XDbgProxy::WriteProcessMemory(ApiCallPacket& inPkt)
+{
+	MyTrace("%s()", __FUNCTION__);
+
+	ApiReturnPakcet outPkt;
+
+	PVOID addr = inPkt.WriteProcessMemory.addr;
+	PUCHAR buffer = inPkt.WriteProcessMemory.buffer;
+	SIZE_T size = inPkt.WriteProcessMemory.size;
+	
+	if (IsBadWritePtr(addr, size)) {
+		outPkt.lastError = ERROR_INVALID_ADDRESS;
+		outPkt.WriteProcessMemory.result = FALSE;
+		sendApiReturn(outPkt);
+		return;
+	}
+
+	memcpy(addr, buffer, size);
+	outPkt.lastError = 0;
+	outPkt.WriteProcessMemory.result = TRUE;
+	outPkt.WriteProcessMemory.writtenSize = size;
+	sendApiReturn(outPkt);
 }

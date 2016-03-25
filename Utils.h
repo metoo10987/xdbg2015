@@ -70,8 +70,19 @@ typedef struct _THREAD_BASIC_INFORMATION {
 
 } THREAD_BASIC_INFORMATION, *PTHREAD_BASIC_INFORMATION;
 
+typedef struct _PROCESS_BASIC_INFORMATION
+{
+	NTSTATUS ExitStatus;
+	PVOID PebBaseAddress;
+	ULONG_PTR AffinityMask;
+	KPRIORITY BasePriority;
+	ULONG_PTR UniqueProcessId;
+	ULONG_PTR InheritedFromUniqueProcessId;
+} PROCESS_BASIC_INFORMATION, *PPROCESS_BASIC_INFORMATION;
+
 PVOID WINAPI GetThreadStartAddress(HANDLE hThread);
 PVOID WINAPI GetThreadStartAddress(DWORD tid);
 DWORD WINAPI GetThreadIdFromHandle(HANDLE hThread);
 _TEB* GetThreadTeb(DWORD tid);
 DWORD GetProcessMainThread(DWORD dwProcID);
+DWORD WINAPI GetProcessIdFromHandle(HANDLE hProcess);

@@ -10,7 +10,8 @@
 #include <tlhelp32.h>
 
 // XDbgController xdbg;
-
+UINT debug_if = 0;
+UINT api_hook_mask = 0;
 DWORD GetProcessByName(const char *filename)
 {
 	HANDLE hSnapShot = CreateToolhelp32Snapshot(TH32CS_SNAPALL, NULL);
@@ -30,9 +31,8 @@ DWORD GetProcessByName(const char *filename)
 	return 0;
 }
 
-BOOL(__stdcall * Real_GetThreadContext)(HANDLE a0,
-	LPCONTEXT a1)
-	= GetThreadContext;
+extern BOOL(__stdcall * Real_GetThreadContext)(HANDLE a0,
+	LPCONTEXT a1);
 
 int _tmain(int argc, _TCHAR* argv[])
 {
