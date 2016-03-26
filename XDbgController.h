@@ -103,7 +103,7 @@ private:
 
 protected:
 	HANDLE				_hPipe;
-	DWORD				_pid;
+	volatile DWORD		_pid;
 	OVERLAPPED			_overlap;
 	bool				_pending;
 	HANDLE				_hProcess;

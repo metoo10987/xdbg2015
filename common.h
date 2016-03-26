@@ -71,7 +71,7 @@ void _MyTrace(LPCSTR fmt, ...);
 
 //////////////////////////////////////////////////////////////////////////
 // Remote API
-#define MAX_MEMORY_BLOCK				(256)
+#define MAX_MEMORY_BLOCK				(1024)
 
 #define ID_ReadProcessMemory			(0x00000001)
 #define ID_WriteProcessMemory			(0x00000002)

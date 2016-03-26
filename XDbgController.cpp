@@ -102,7 +102,7 @@ BOOL XDbgController::recvApiReturn(ApiReturnPakcet& inPkt)
 
 BOOL XDbgController::sendApiCall(const ApiCallPacket& outPkt, ApiReturnPakcet& inPkt)
 {
-	// MutexGuard guard(&_apiMutex);
+	MutexGuard guard(&_apiMutex);
 
 	if (!sendApiCall(outPkt)) {
 		return false;
@@ -130,6 +130,8 @@ bool XDbgController::attach(DWORD pid, DWORD tid)
 		return false;
 	}
 
+	_pid = pid;
+
 	DEBUG_EVENT event;
 	if (!waitEvent(&event)) { // SEND FIRST MSG TO VERIFY CONNECTION
 		MyTrace("%s(): connection is unavailable");
@@ -140,9 +142,7 @@ bool XDbgController::attach(DWORD pid, DWORD tid)
 	}
 
 	assert(event.dwDebugEventCode == ATTACHED_EVENT);
-	continueEvent(event.dwProcessId, tid ? tid : event.dwThreadId, DBG_CONTINUE);
-
-	_pid = pid;
+	continueEvent(event.dwProcessId, tid ? tid : event.dwThreadId, DBG_CONTINUE);	
 	return true;
 }
 

@@ -192,7 +192,7 @@ LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 	if (!_attached)
 		return EXCEPTION_CONTINUE_SEARCH;
 
-	if (XDbgGetCurrentThreadId() == getId())
+	if (XDbgGetCurrentThreadId() == getId() || XDbgGetCurrentThreadId() == _apiThread.getId())
 		return EXCEPTION_CONTINUE_SEARCH;
 
 	if (threadIdToHandle(XDbgGetCurrentThreadId()) == NULL) {
@@ -575,7 +575,7 @@ BOOL XDbgProxy::recvApiCall(ApiCallPacket& inPkt)
 {
 	DWORD len;
 	if (!ReadFile(_hApiPipe, &inPkt, sizeof(inPkt), &len, NULL)) {
-		assert(false);
+		// assert(false);
 		return FALSE;
 	}
 
@@ -650,18 +650,17 @@ void XDbgProxy::ReadProcessMemory(ApiCallPacket& inPkt)
 	SIZE_T size = inPkt.ReadProcessMemory.size;
 
 	ApiReturnPakcet outPkt;
-	if (IsBadReadPtr(addr, size)) {
+	/*if (IsBadReadPtr(addr, size)) {
 		outPkt.lastError = ERROR_INVALID_ADDRESS;
 		outPkt.ReadProcessMemory.result = FALSE;
 		sendApiReturn(outPkt);
 		return;
-	}
+	}*/
 
-	memcpy(outPkt.ReadProcessMemory.buffer, addr, size);
+	outPkt.ReadProcessMemory.result = ::ReadProcessMemory(GetCurrentProcess(), addr, 
+		outPkt.ReadProcessMemory.buffer, size, &outPkt.ReadProcessMemory.size);
 
-	outPkt.lastError = 0;
-	outPkt.ReadProcessMemory.result = TRUE;
-	outPkt.ReadProcessMemory.size = size;
+	outPkt.lastError = GetLastError();	
 	sendApiReturn(outPkt);
 }
 
@@ -675,7 +674,7 @@ void XDbgProxy::WriteProcessMemory(ApiCallPacket& inPkt)
 	PUCHAR buffer = inPkt.WriteProcessMemory.buffer;
 	SIZE_T size = inPkt.WriteProcessMemory.size;
 	
-	if (IsBadWritePtr(addr, size)) {
+	/* if (IsBadWritePtr(addr, size)) {
 		outPkt.lastError = ERROR_INVALID_ADDRESS;
 		outPkt.WriteProcessMemory.result = FALSE;
 		sendApiReturn(outPkt);
@@ -683,8 +682,15 @@ void XDbgProxy::WriteProcessMemory(ApiCallPacket& inPkt)
 	}
 
 	memcpy(addr, buffer, size);
+
 	outPkt.lastError = 0;
 	outPkt.WriteProcessMemory.result = TRUE;
 	outPkt.WriteProcessMemory.writtenSize = size;
+	sendApiReturn(outPkt); */
+
+	outPkt.WriteProcessMemory.result = ::WriteProcessMemory(GetCurrentProcess(), addr,
+		buffer, size, &outPkt.WriteProcessMemory.writtenSize);
+
+	outPkt.lastError = GetLastError();
 	sendApiReturn(outPkt);
 }
