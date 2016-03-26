@@ -81,6 +81,8 @@ public:
 		return _pid;
 	}
 
+	static BOOL injectDll(DWORD pid, HMODULE hInst);
+
 protected:
 	void resetDbgEvent()
 	{

@@ -43,7 +43,7 @@ bool LoadRemoteDll(DWORD pid, const char* dllPath)
 	return exitCode != 0;
 }
 
-BOOL injectDll(DWORD pid, HMODULE hInst)
+BOOL injectDllByRemoteThread(DWORD pid, HMODULE hInst)
 {
 	char dllPath[MAX_PATH];
 	if (!GetModuleFileName((HMODULE)hInst, dllPath, sizeof(dllPath) - 1)) {
@@ -363,4 +363,66 @@ DWORD WINAPI GetProcessIdFromHandle(HANDLE hProcess)
 		return 0;
 
 	return (DWORD)bi.UniqueProcessId;
+}
+
+struct EnumParam {
+	DWORD		pid;
+	HWND*		result;
+	DWORD*		threadId;
+};
+
+static BOOL CALLBACK __EnumWindowsProc(HWND hwnd, LPARAM lParam)
+{
+	EnumParam* param = (EnumParam* )lParam;
+	DWORD dwProcessId;
+	DWORD threadId = GetWindowThreadProcessId(hwnd, &dwProcessId);
+	if (dwProcessId == param->pid) {
+		*param->result = hwnd;
+		*param->threadId = threadId;
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+HWND getWinFromPid(DWORD pid, DWORD* threadId)
+{
+	HWND result = NULL;
+	DWORD tid = 0;
+	EnumParam param;
+	param.pid = pid;
+	param.result = &result;
+	param.threadId = &tid;
+	EnumWindows(__EnumWindowsProc, (LPARAM )&param);
+	if (tid)
+		*threadId = tid;
+	return result;
+}
+
+
+//////////////////////////////////////////////////////////////////////////
+#pragma data_seg(".shared")
+HHOOK callWndhookHandle;
+#pragma data_seg()
+#pragma comment(linker,"/SECTION:.shared,RWS")
+
+#define HOOK_RESPONSE_MAGIC		(0x12345678)
+LRESULT CALLBACK CallWndRetHookProc(int nCode, WPARAM wParam, LPARAM lParam)
+{
+	// PCWPRETSTRUCT param = (PCWPRETSTRUCT)lParam;
+	LRESULT r = CallNextHookEx(callWndhookHandle, nCode, wParam, lParam);
+	UnhookWindowsHookEx(callWndhookHandle);
+	return r;
+}
+
+BOOL injectDllByWinHook(DWORD pid, HMODULE hInst)
+{
+	DWORD threadId;
+	HWND hWnd = getWinFromPid(pid, &threadId);
+	if (hWnd && threadId) {
+		callWndhookHandle = SetWindowsHookEx(WH_CALLWNDPROCRET, CallWndRetHookProc, hInst, threadId);
+		SendMessage(hWnd, WM_NULL, 0, 0);
+		return TRUE;
+	} else
+		return FALSE;
 }

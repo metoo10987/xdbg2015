@@ -9,6 +9,7 @@
 
 extern UINT debug_if;
 extern UINT api_hook_mask;
+extern UINT inject_method;
 
 std::vector<AutoDebug* > autoDebugHandlers;
 
@@ -93,7 +94,7 @@ BOOL XDbgController::recvApiReturn(ApiReturnPakcet& inPkt)
 {
 	DWORD len;
 	if (!ReadFile(_hApiPipe, &inPkt, sizeof(inPkt), &len, NULL)) {
-		assert(false);
+		// assert(false);
 		return FALSE;
 	}
 
@@ -109,6 +110,18 @@ BOOL XDbgController::sendApiCall(const ApiCallPacket& outPkt, ApiReturnPakcet& i
 	}
 
 	return recvApiReturn(inPkt);
+}
+
+BOOL XDbgController::injectDll(DWORD pid, HMODULE hInst)
+{
+	if (inject_method == 0)
+		return injectDllByRemoteThread(pid, hInst);
+	else if (inject_method == 1)
+		return injectDllByWinHook(pid, hInst);
+	else {
+		assert(false);
+		return FALSE;
+	}
 }
 
 bool XDbgController::attach(DWORD pid, DWORD tid)
@@ -221,8 +234,10 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 	case CREATE_PROCESS_DEBUG_EVENT:
 		{
 			char fileName[MAX_PATH + 1];
-			GetModuleFileNameEx(_hProcess, (HMODULE)lpDebugEvent->u.CreateProcessInfo.lpBaseOfImage, 
-				fileName, MAX_PATH);
+			/* GetModuleFileNameEx(_hProcess, (HMODULE)lpDebugEvent->u.CreateProcessInfo.lpBaseOfImage, 
+				fileName, MAX_PATH); */
+			DWORD len;
+			ReadProcessMemory(_hProcess, lpDebugEvent->u.CreateProcessInfo.lpImageName, fileName, sizeof(fileName) - 1, &len);
 			lpDebugEvent->u.CreateProcessInfo.hProcess = _hProcess;
 			lpDebugEvent->u.CreateProcessInfo.hThread = OpenThread(THREAD_ALL_ACCESS, FALSE, 
 				lpDebugEvent->dwThreadId);
@@ -233,9 +248,10 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 				NULL, OPEN_EXISTING, 0, NULL);
 			assert(lpDebugEvent->u.CreateProcessInfo.hFile != INVALID_HANDLE_VALUE);
 
-			MyTrace("%s(): CREATE_PROCESS_DEBUG_EVENT: hFile = %x, hProcess = %x, hThread = %x", 
+			MyTrace("%s(): CREATE_PROCESS_DEBUG_EVENT: hFile = %x, hProcess = %x, hThread = %x, fileName = %s", 
 				__FUNCTION__, lpDebugEvent->u.CreateProcessInfo.hFile, 
-				lpDebugEvent->u.CreateProcessInfo.hProcess, lpDebugEvent->u.CreateProcessInfo.hThread);
+				lpDebugEvent->u.CreateProcessInfo.hProcess, lpDebugEvent->u.CreateProcessInfo.hThread, 
+				fileName);
 		}
 		break;
 
@@ -462,7 +478,7 @@ BOOL __stdcall Mine_CreateProcessA(LPCSTR a0,
 		return FALSE;
 	}
 
-	if (injectDll(a9->dwProcessId, dbgctl.getModuleHandle())) {
+	if (dbgctl.injectDll(a9->dwProcessId, dbgctl.getModuleHandle())) {
 		int i;
 		for (i = 30; i > 0; i--) {
 			if (dbgctl.attach(a9->dwProcessId, a9->dwThreadId))
@@ -514,7 +530,7 @@ BOOL __stdcall Mine_CreateProcessW(LPCWSTR a0,
 		return FALSE;
 	}
 
-	if (injectDll(a9->dwProcessId, dbgctl.getModuleHandle())) {
+	if (dbgctl.injectDll(a9->dwProcessId, dbgctl.getModuleHandle())) {
 		int i;
 		for (i = 30; i > 0; i--) {
 			if (dbgctl.attach(a9->dwProcessId, a9->dwThreadId))
@@ -541,9 +557,16 @@ BOOL __stdcall Mine_DebugActiveProcess(DWORD a0)
 		return Real_DebugActiveProcess(a0);
 
 	XDbgController& dbgctl = XDbgController::instance();
-	if (!injectDll(a0, dbgctl.getModuleHandle())) {
-		MyTrace("%s(): injectDll() failed.", __FUNCTION__);
+	int i;
+	for (i = 30; i > 0; i--) {
+		if (dbgctl.injectDll(a0, dbgctl.getModuleHandle())) {
+			// MyTrace("%s(): injectDll() failed.", __FUNCTION__);
+			break;
+		}
 	}
+
+	if (i == 0)
+		return FALSE;
 
 	return dbgctl.attach(a0, GetProcessMainThread(a0)) ? TRUE : FALSE;
 }
@@ -833,52 +856,79 @@ size_t XDbgController::queryMemory(LPCVOID lpAddress, PMEMORY_BASIC_INFORMATION 
 bool XDbgController::readMemory(LPCVOID lpBaseAddress, PVOID lpBuffer, size_t nSize, 
 	size_t * lpNumberOfBytesRead)
 {
-	// FIXME: when the size is bigger MAX_MEMORY_BLOCK
-	assert(nSize <= MAX_MEMORY_BLOCK);
+	size_t pktNum = (nSize + MAX_MEMORY_BLOCK - 1) / MAX_MEMORY_BLOCK;
+	size_t readlen = 0;
 
-	MyTrace("%s() addr: %p, size_t: %x", __FUNCTION__, lpBaseAddress, nSize);
+	// MyTrace("%s() addr: %p, size_t: %x", __FUNCTION__, lpBaseAddress, nSize);
+	for (size_t i = 0; i < pktNum; i ++) {
+		ApiCallPacket outPkt;
+		ApiReturnPakcet inPkt;
 
-	ApiCallPacket outPkt;
-	ApiReturnPakcet inPkt;
-	outPkt.apiId = ID_ReadProcessMemory;
-	outPkt.ReadProcessMemory.addr = (LPVOID )lpBaseAddress;
-	outPkt.ReadProcessMemory.size = nSize;
-	if (!sendApiCall(outPkt, inPkt)) {
-		assert(false);
-		return false;
+		size_t pos = i * MAX_MEMORY_BLOCK;
+		outPkt.apiId = ID_ReadProcessMemory;
+		outPkt.ReadProcessMemory.addr = (LPVOID)((LPTSTR)lpBaseAddress + pos);
+		outPkt.ReadProcessMemory.size = (i == pktNum - 1 ? nSize % MAX_MEMORY_BLOCK : MAX_MEMORY_BLOCK);
+		if (!sendApiCall(outPkt, inPkt)) {
+			// assert(false);
+			return false;
+		}
+
+		if (!inPkt.ReadProcessMemory.result) {
+			if (readlen == 0) {
+				SetLastError(inPkt.lastError);
+				return false;
+			} else 
+				break;
+		}
+
+		memcpy((LPTSTR)lpBuffer + pos, inPkt.ReadProcessMemory.buffer, inPkt.ReadProcessMemory.size);
+		readlen += inPkt.ReadProcessMemory.size;
+		if (inPkt.ReadProcessMemory.size < outPkt.ReadProcessMemory.size)
+			break;
 	}
 
-	if (!inPkt.ReadProcessMemory.result)
-		return false;
-
-	memcpy(lpBuffer, inPkt.ReadProcessMemory.buffer, inPkt.ReadProcessMemory.size);
-	*lpNumberOfBytesRead = inPkt.ReadProcessMemory.size;
+	*lpNumberOfBytesRead = readlen;
 	return true;
 }
 
 bool XDbgController::writeMemory(LPVOID lpBaseAddress, LPCVOID lpBuffer, size_t nSize, 
 	size_t * lpNumberOfBytesWritten)
 {
-	// FIXME: when the size is bigger MAX_MEMORY_BLOCK
-	assert(nSize <= MAX_MEMORY_BLOCK);
 	MyTrace("%s() addr: %p, size_t: %x", __FUNCTION__, lpBaseAddress, nSize);
 
-	ApiCallPacket outPkt;
-	ApiReturnPakcet inPkt;
-	outPkt.apiId = ID_WriteProcessMemory;
-	outPkt.WriteProcessMemory.addr = lpBaseAddress;
-	outPkt.WriteProcessMemory.size = nSize;
-	memcpy(outPkt.WriteProcessMemory.buffer, lpBuffer, nSize);
+	size_t pktNum = (nSize + MAX_MEMORY_BLOCK - 1) / MAX_MEMORY_BLOCK;
+	size_t writtenlen = 0;
 
-	if (!sendApiCall(outPkt, inPkt)) {
-		assert(false);
-		return false;
+	for (size_t i = 0; i < pktNum; i ++) {
+
+		ApiCallPacket outPkt;
+		ApiReturnPakcet inPkt;
+
+		size_t pos = i * MAX_MEMORY_BLOCK;
+		outPkt.apiId = ID_WriteProcessMemory;
+		outPkt.WriteProcessMemory.addr = (LPVOID)((LPTSTR)lpBaseAddress + pos);
+		outPkt.WriteProcessMemory.size = (i == pktNum - 1 ? nSize % MAX_MEMORY_BLOCK : MAX_MEMORY_BLOCK);
+		memcpy(outPkt.WriteProcessMemory.buffer, (LPVOID)((LPTSTR)lpBuffer + pos), 
+			outPkt.WriteProcessMemory.size);
+
+		if (!sendApiCall(outPkt, inPkt)) {
+			// assert(false);
+			return false;
+		}
+
+		if (!inPkt.WriteProcessMemory.result) {
+			if (writtenlen == 0)
+				return false;
+			else
+				break;
+		}
+
+		writtenlen += inPkt.WriteProcessMemory.writtenSize;
+		if (inPkt.WriteProcessMemory.writtenSize < outPkt.WriteProcessMemory.size)
+			break;
 	}
 
-	if (!inPkt.WriteProcessMemory.result)
-		return false;
-
-	*lpNumberOfBytesWritten = inPkt.WriteProcessMemory.writtenSize;
+	*lpNumberOfBytesWritten = writtenlen;
 	return true;
 }
 

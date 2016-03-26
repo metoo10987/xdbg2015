@@ -187,13 +187,14 @@ void XDbgProxy::stop()
 
 LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 {
-	MutexGuard guard(this);
 
 	if (!_attached)
 		return EXCEPTION_CONTINUE_SEARCH;
 
 	if (XDbgGetCurrentThreadId() == getId() || XDbgGetCurrentThreadId() == _apiThread.getId())
 		return EXCEPTION_CONTINUE_SEARCH;
+
+	MutexGuard guard(this);
 
 	if (threadIdToHandle(XDbgGetCurrentThreadId()) == NULL) {
 		return EXCEPTION_CONTINUE_SEARCH;
@@ -536,6 +537,20 @@ void XDbgProxy::sendThreadInfo()
 	msg.dwDebugEventCode = CREATE_THREAD_DEBUG_EVENT;
 	msg.dwProcessId = XDbgGetCurrentProcessId();
 	
+	DWORD threadId = getFirstThread();
+	while (threadId) {
+
+		msg.dwThreadId = threadId;
+		msg.u.CreateThread.hThread = NULL;
+		msg.u.CreateThread.lpStartAddress = (LPTHREAD_START_ROUTINE)
+			GetThreadStartAddress(threadId);
+
+		msg.u.CreateThread.lpThreadLocalBase = GetThreadTeb(threadId);
+		sendDbgEvent(event, ack, false);
+		threadId = getNextThread();
+	}
+
+	/*
 	HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
 	if (hSnapshot != INVALID_HANDLE_VALUE) {
 		THREADENTRY32 te;
@@ -562,6 +577,7 @@ void XDbgProxy::sendThreadInfo()
 
 		XDbgCloseHandle(hSnapshot);
 	}
+	*/
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -616,13 +632,13 @@ long XDbgProxy::runApiLoop()
 		}
 
 		if (!recvApiCall(inPkt)) {
-			assert(false);
+			// assert(false);
 			// return -1;
 			attached = false;
 			continue;
 		}
 
-		MyTrace("%s(): ApiCall: id = %d", __FUNCTION__, inPkt.apiId);
+		// MyTrace("%s(): ApiCall: id = %d", __FUNCTION__, inPkt.apiId);
 
 		RemoteApiHandlers::iterator it;
 		it = _apiHandlers.find(inPkt.apiId);
@@ -634,15 +650,16 @@ long XDbgProxy::runApiLoop()
 
 		RemoteApiHandler handler = it->second;
 		(this->*handler)(inPkt);
-		MyTrace("%s(): ApiCall: id = %d completed", __FUNCTION__, inPkt.apiId);
+		// MyTrace("%s(): ApiCall: id = %d completed", __FUNCTION__, inPkt.apiId);
 	}
 
 	return 0;
 }
 
+#if 0
 void XDbgProxy::ReadProcessMemory(ApiCallPacket& inPkt)
 {
-	MyTrace("%s()", __FUNCTION__);
+	// MyTrace("%s()", __FUNCTION__);
 
 	assert(inPkt.ReadProcessMemory.size <= MAX_MEMORY_BLOCK);
 
@@ -650,12 +667,6 @@ void XDbgProxy::ReadProcessMemory(ApiCallPacket& inPkt)
 	SIZE_T size = inPkt.ReadProcessMemory.size;
 
 	ApiReturnPakcet outPkt;
-	/*if (IsBadReadPtr(addr, size)) {
-		outPkt.lastError = ERROR_INVALID_ADDRESS;
-		outPkt.ReadProcessMemory.result = FALSE;
-		sendApiReturn(outPkt);
-		return;
-	}*/
 
 	outPkt.ReadProcessMemory.result = ::ReadProcessMemory(GetCurrentProcess(), addr, 
 		outPkt.ReadProcessMemory.buffer, size, &outPkt.ReadProcessMemory.size);
@@ -667,14 +678,65 @@ void XDbgProxy::ReadProcessMemory(ApiCallPacket& inPkt)
 void XDbgProxy::WriteProcessMemory(ApiCallPacket& inPkt)
 {
 	MyTrace("%s()", __FUNCTION__);
-
+	assert(inPkt.WriteProcessMemory.size <= MAX_MEMORY_BLOCK);
 	ApiReturnPakcet outPkt;
 
 	PVOID addr = inPkt.WriteProcessMemory.addr;
 	PUCHAR buffer = inPkt.WriteProcessMemory.buffer;
 	SIZE_T size = inPkt.WriteProcessMemory.size;
 	
-	/* if (IsBadWritePtr(addr, size)) {
+	outPkt.WriteProcessMemory.result = ::WriteProcessMemory(GetCurrentProcess(), addr,
+		buffer, size, &outPkt.WriteProcessMemory.writtenSize);
+
+	outPkt.lastError = GetLastError();
+	sendApiReturn(outPkt);
+}
+
+#else 
+
+void XDbgProxy::ReadProcessMemory(ApiCallPacket& inPkt)
+{
+	// MyTrace("%s()", __FUNCTION__);
+
+	assert(inPkt.ReadProcessMemory.size <= MAX_MEMORY_BLOCK);
+
+	PVOID addr = inPkt.ReadProcessMemory.addr;
+	SIZE_T size = inPkt.ReadProcessMemory.size;
+
+	ApiReturnPakcet outPkt;
+	if (IsBadReadPtr(addr, size)) {
+		outPkt.lastError = ERROR_INVALID_ADDRESS;
+		outPkt.ReadProcessMemory.result = FALSE;
+		sendApiReturn(outPkt);
+		return;
+	}
+	
+	__try {
+		memcpy(outPkt.ReadProcessMemory.buffer, inPkt.ReadProcessMemory.addr,
+			inPkt.ReadProcessMemory.size);
+		outPkt.ReadProcessMemory.result = TRUE;
+		outPkt.ReadProcessMemory.size = inPkt.ReadProcessMemory.size;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		outPkt.lastError = ERROR_INVALID_ADDRESS;
+		outPkt.ReadProcessMemory.result = FALSE;
+		sendApiReturn(outPkt);
+	}
+
+	sendApiReturn(outPkt);
+}
+
+void XDbgProxy::WriteProcessMemory(ApiCallPacket& inPkt)
+{
+	MyTrace("%s()", __FUNCTION__);
+	assert(inPkt.WriteProcessMemory.size <= MAX_MEMORY_BLOCK);
+	ApiReturnPakcet outPkt;
+
+	PVOID addr = inPkt.WriteProcessMemory.addr;
+	PUCHAR buffer = inPkt.WriteProcessMemory.buffer;
+	SIZE_T size = inPkt.WriteProcessMemory.size;
+
+	if (IsBadWritePtr(addr, size)) {
 		outPkt.lastError = ERROR_INVALID_ADDRESS;
 		outPkt.WriteProcessMemory.result = FALSE;
 		sendApiReturn(outPkt);
@@ -686,11 +748,7 @@ void XDbgProxy::WriteProcessMemory(ApiCallPacket& inPkt)
 	outPkt.lastError = 0;
 	outPkt.WriteProcessMemory.result = TRUE;
 	outPkt.WriteProcessMemory.writtenSize = size;
-	sendApiReturn(outPkt); */
-
-	outPkt.WriteProcessMemory.result = ::WriteProcessMemory(GetCurrentProcess(), addr,
-		buffer, size, &outPkt.WriteProcessMemory.writtenSize);
-
-	outPkt.lastError = GetLastError();
 	sendApiReturn(outPkt);
 }
+
+#endif

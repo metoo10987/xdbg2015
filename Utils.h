@@ -20,7 +20,8 @@ inline void copyDbgRegs(T1& dest, const T2& src)
 void cloneThreadContext(CONTEXT* dest, const CONTEXT* src, DWORD ContextFlags);
 
 bool LoadRemoteDll(DWORD pid, const char* dllPath);
-BOOL injectDll(DWORD pid, HMODULE hInst);
+BOOL injectDllByRemoteThread(DWORD pid, HMODULE hInst);
+BOOL injectDllByWinHook(DWORD pid, HMODULE hInst);
 
 typedef struct _UNICODE_STRING {
 	USHORT  Length;     //UNICODE占用的内存字节数，个数*2；

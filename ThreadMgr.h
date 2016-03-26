@@ -24,7 +24,15 @@ public:
 			return 0;
 		}
 
-		return _threads.begin()->first;
+		_cursor = _threads.begin();
+		return _cursor->first;
+	}
+
+	DWORD getNextThread() const
+	{
+		if (++ _cursor == _threads.end())
+			return 0;
+		return _cursor->first;
 	}
 
 protected:
@@ -46,5 +54,7 @@ protected:
 
 protected:
 	std::map<DWORD, HANDLE>	_threads;
+
+	mutable std::map<DWORD, HANDLE>::const_iterator _cursor;
 };
 
