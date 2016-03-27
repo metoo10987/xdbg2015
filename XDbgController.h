@@ -32,6 +32,8 @@ public:
 	size_t queryMemory(LPCVOID lpAddress, PMEMORY_BASIC_INFORMATION lpBuffer, size_t dwLength);
 	bool readMemory(LPCVOID lpBaseAddress, PVOID lpBuffer, size_t nSize, size_t * lpNumberOfBytesRead);
 	bool writeMemory(LPVOID lpBaseAddress, LPCVOID lpBuffer, size_t nSize, size_t * lpNumberOfBytesWritten);
+	DWORD suspendThread(HANDLE hThread);
+	DWORD resumeThread(HANDLE hThread);
 
 	DWORD getEventCode() const
 	{

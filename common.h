@@ -75,7 +75,8 @@ void _MyTrace(LPCSTR fmt, ...);
 
 #define ID_ReadProcessMemory			(0x00000001)
 #define ID_WriteProcessMemory			(0x00000002)
-
+#define ID_SuspendThread				(0x00000004)
+#define ID_ResumeThread					(0x00000008)
 
 #define CALL_MESSAGE_SIZE		sizeof(ApiCallPacket)
 #define RETURN_MESSAGE_SIZE		sizeof(ApiReturnPakcet)
@@ -95,6 +96,14 @@ struct ApiCallPacket {
 			UCHAR		buffer[MAX_MEMORY_BLOCK];
 			SIZE_T		size;
 		} WriteProcessMemory;
+
+		struct  {
+			DWORD		threadId;
+		} SuspendThread;
+
+		struct  {
+			DWORD		threadId;
+		} ResumeThread;
 	};
 };
 
@@ -112,6 +121,14 @@ struct ApiReturnPakcet {
 			BOOL		result;
 			SIZE_T		writtenSize;
 		} WriteProcessMemory;
+
+		struct  {
+			DWORD		result;
+		} SuspendThread;
+
+		struct  {
+			DWORD		result;
+		} ResumeThread;
 	};	
 };
 

@@ -197,6 +197,7 @@ LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 	MutexGuard guard(this);
 
 	if (threadIdToHandle(XDbgGetCurrentThreadId()) == NULL) {
+		// assert(false);
 		return EXCEPTION_CONTINUE_SEARCH;
 	}
 
@@ -308,7 +309,11 @@ BOOL XDbgProxy::DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 		// MyTrace("%s(): process(%u) xdbg proxy unloaded. thread id: %u", __FUNCTION__, GetCurrentProcessId(), GetCurrentThreadId());
 		break;
 
-	case DLL_THREAD_ATTACH:		
+	case DLL_THREAD_ATTACH:
+
+		MyTrace("%s(): process(%u) xdbg proxy attach thread. thread id: %u <<<", __FUNCTION__,
+			GetCurrentProcessId(), GetCurrentThreadId());
+
 		if (!_attached)
 			return TRUE;
 		// REPORT CreateThread
@@ -327,15 +332,16 @@ BOOL XDbgProxy::DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 		}
 
 		addThread(XDbgGetCurrentThreadId());
-		// MYTRACE("%s(): process(%u) xdbg proxy attach thread. thread id: %u", __FUNCTION__,
-		//	GetCurrentProcessId(), GetCurrentThreadId());
+		MyTrace("%s(): process(%u) xdbg proxy attach thread. thread id: %u >>>", __FUNCTION__,
+			GetCurrentProcessId(), GetCurrentThreadId());
 		break;
 
 	case DLL_THREAD_DETACH:
-		// MYTRACE("%s(): process(%u) xdbg proxy detach thread. thread id: %u", __FUNCTION__,
-		//	GetCurrentProcessId(), GetCurrentThreadId());
-
 		// REPORT ExitThread
+
+		MyTrace("%s(): process(%u) xdbg proxy detach thread. thread id: %u <<<", __FUNCTION__,
+			GetCurrentProcessId(), GetCurrentThreadId());
+
 		if (!_attached)
 			return TRUE;
 		msg.dwProcessId = XDbgGetCurrentProcessId();
@@ -349,6 +355,8 @@ BOOL XDbgProxy::DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 		}
 
 		delThread(XDbgGetCurrentThreadId());
+		MyTrace("%s(): process(%u) xdbg proxy detach thread. thread id: %u >>>", __FUNCTION__,
+			GetCurrentProcessId(), GetCurrentThreadId());
 		break;
 	};
 
@@ -585,6 +593,8 @@ void XDbgProxy::registerRemoteApi()
 {
 	_apiHandlers[ID_ReadProcessMemory] = &XDbgProxy::ReadProcessMemory;
 	_apiHandlers[ID_WriteProcessMemory] = &XDbgProxy::WriteProcessMemory;
+	_apiHandlers[ID_SuspendThread] = &XDbgProxy::SuspendThread;
+	_apiHandlers[ID_ResumeThread] = &XDbgProxy::ResumeThread;
 }
 
 BOOL XDbgProxy::recvApiCall(ApiCallPacket& inPkt)
@@ -656,7 +666,7 @@ long XDbgProxy::runApiLoop()
 	return 0;
 }
 
-#if 0
+#if 1
 void XDbgProxy::ReadProcessMemory(ApiCallPacket& inPkt)
 {
 	// MyTrace("%s()", __FUNCTION__);
@@ -667,9 +677,12 @@ void XDbgProxy::ReadProcessMemory(ApiCallPacket& inPkt)
 	SIZE_T size = inPkt.ReadProcessMemory.size;
 
 	ApiReturnPakcet outPkt;
-
-	outPkt.ReadProcessMemory.result = ::ReadProcessMemory(GetCurrentProcess(), addr, 
-		outPkt.ReadProcessMemory.buffer, size, &outPkt.ReadProcessMemory.size);
+	__try {
+		outPkt.ReadProcessMemory.result = ::ReadProcessMemory(GetCurrentProcess(), addr,
+			outPkt.ReadProcessMemory.buffer, size, &outPkt.ReadProcessMemory.size);
+	} __except (EXCEPTION_EXECUTE_HANDLER) {
+		outPkt.ReadProcessMemory.result = FALSE;
+	}
 
 	outPkt.lastError = GetLastError();	
 	sendApiReturn(outPkt);
@@ -677,7 +690,7 @@ void XDbgProxy::ReadProcessMemory(ApiCallPacket& inPkt)
 
 void XDbgProxy::WriteProcessMemory(ApiCallPacket& inPkt)
 {
-	MyTrace("%s()", __FUNCTION__);
+	// MyTrace("%s()", __FUNCTION__);
 	assert(inPkt.WriteProcessMemory.size <= MAX_MEMORY_BLOCK);
 	ApiReturnPakcet outPkt;
 
@@ -685,8 +698,13 @@ void XDbgProxy::WriteProcessMemory(ApiCallPacket& inPkt)
 	PUCHAR buffer = inPkt.WriteProcessMemory.buffer;
 	SIZE_T size = inPkt.WriteProcessMemory.size;
 	
-	outPkt.WriteProcessMemory.result = ::WriteProcessMemory(GetCurrentProcess(), addr,
-		buffer, size, &outPkt.WriteProcessMemory.writtenSize);
+	__try {
+		outPkt.WriteProcessMemory.result = ::WriteProcessMemory(GetCurrentProcess(), addr,
+			buffer, size, &outPkt.WriteProcessMemory.writtenSize);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		outPkt.WriteProcessMemory.result = FALSE;
+	}
 
 	outPkt.lastError = GetLastError();
 	sendApiReturn(outPkt);
@@ -752,3 +770,31 @@ void XDbgProxy::WriteProcessMemory(ApiCallPacket& inPkt)
 }
 
 #endif
+
+void XDbgProxy::SuspendThread(ApiCallPacket& inPkt)
+{
+	ApiReturnPakcet outPkt;
+	HANDLE hThread;
+	
+	hThread = threadIdToHandle(inPkt.SuspendThread.threadId);
+
+	if (hThread == NULL)
+		outPkt.SuspendThread.result = -1;
+	else
+		outPkt.SuspendThread.result = ::SuspendThread(hThread);
+	sendApiReturn(outPkt);
+}
+
+void XDbgProxy::ResumeThread(ApiCallPacket& inPkt)
+{
+	ApiReturnPakcet outPkt;
+	HANDLE hThread;
+
+	hThread = threadIdToHandle(inPkt.ResumeThread.threadId);
+
+	if (hThread == NULL)
+		outPkt.ResumeThread.result = -1;
+	else
+		outPkt.ResumeThread.result = ::ResumeThread(hThread);
+	sendApiReturn(outPkt);
+}

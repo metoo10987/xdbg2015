@@ -306,7 +306,7 @@ void cloneThreadContext(CONTEXT* dest, const CONTEXT* src, DWORD ContextFlags)
 
 #endif // #ifdef _M_X64
 
-DWORD WINAPI GetThreadIdFromHandle(HANDLE hThread)
+DWORD WINAPI GetThreadIdFromHandle(HANDLE hThread, LPDWORD processId)
 {
 	NTSTATUS ntStatus;
 	if (NtQueryInformationThread == NULL)
@@ -329,6 +329,9 @@ DWORD WINAPI GetThreadIdFromHandle(HANDLE hThread)
 	CloseHandle(hThread2);
 	if (ntStatus != 0)
 		return 0;
+
+	if (processId)
+		*processId = bi.ClientId.UniqueProcess;
 
 	return (DWORD )bi.ClientId.UniqueThread;
 }

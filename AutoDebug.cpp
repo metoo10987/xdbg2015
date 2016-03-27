@@ -13,9 +13,9 @@ IgnoreException::IgnoreException()
 
 	char* entry = strtok(ignoreExceptions, ",");
 	while (entry) {
-		unsigned long start;
-		unsigned long end;
-		if (sscanf(entry, "%08X-%08X", &start, &end) == 2 && start <= end) {
+		ULONG_PTR start;
+		ULONG_PTR end;
+		if (sscanf(entry, "%X-%X", &start, &end) == 2) {
 			std::pair<ULONG, ULONG> range;
 			range.first = start;
 			range.second = end;
@@ -31,10 +31,27 @@ bool IgnoreException::peekDebugEvent(LPDEBUG_EVENT event, DWORD* continueStatus)
 	if (event->dwDebugEventCode == EXCEPTION_DEBUG_EVENT) {
 		std::vector<std::pair<ULONG, ULONG> >::iterator it;
 		for (it = _exceptions.begin(); it != _exceptions.end(); it ++) {
+			if (it->first == 0 && (ULONG )event->u.Exception.ExceptionRecord.ExceptionAddress == it->second) {
+				*continueStatus = DBG_EXCEPTION_NOT_HANDLED;
+				return false;
+			}
+
 			if (event->u.Exception.ExceptionRecord.ExceptionCode >= it->first &&
 				event->u.Exception.ExceptionRecord.ExceptionCode <= it->second) {
 				*continueStatus = DBG_EXCEPTION_NOT_HANDLED;
 				return false;
+			}
+
+			if (it->second == 0) {
+				DWORD code = 0;
+				SIZE_T len;
+				::ReadProcessMemory(XDbgController::instance().getProcessHandle(), 
+					event->u.Exception.ExceptionRecord.ExceptionAddress, &code,
+					sizeof(code), &len);
+				if (code == it->first) {
+					*continueStatus = DBG_EXCEPTION_NOT_HANDLED;
+					return false;
+				}
 			}
 		}
 	}

@@ -85,6 +85,8 @@ protected:
 
 	void ReadProcessMemory(ApiCallPacket& inPkt);
 	void WriteProcessMemory(ApiCallPacket& inPkt);
+	void SuspendThread(ApiCallPacket& inPkt);
+	void ResumeThread(ApiCallPacket& inPkt);
 	//////////////////////////////////////////////////////////////////////////
 
 protected:

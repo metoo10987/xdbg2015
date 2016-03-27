@@ -83,7 +83,7 @@ typedef struct _PROCESS_BASIC_INFORMATION
 
 PVOID WINAPI GetThreadStartAddress(HANDLE hThread);
 PVOID WINAPI GetThreadStartAddress(DWORD tid);
-DWORD WINAPI GetThreadIdFromHandle(HANDLE hThread);
+DWORD WINAPI GetThreadIdFromHandle(HANDLE hThread, LPDWORD processId = NULL);
 _TEB* GetThreadTeb(DWORD tid);
 DWORD GetProcessMainThread(DWORD dwProcID);
 DWORD WINAPI GetProcessIdFromHandle(HANDLE hProcess);

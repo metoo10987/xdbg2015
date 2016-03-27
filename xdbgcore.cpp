@@ -15,8 +15,8 @@
 HMODULE hInstance;
 UINT exec_mode = 0;
 UINT debug_if = 0;
-UINT api_hook_mask = ID_ReadProcessMemory | ID_WriteProcessMemory;
-UINT inject_method = 1;
+UINT api_hook_mask = ID_ReadProcessMemory | ID_WriteProcessMemory | ID_SuspendThread | ID_ResumeThread;
+UINT inject_method = 0;
 // XDbgController* dbgctl = NULL;
 
 //////////////////////////////////////////////////////////////////////////
@@ -37,7 +37,7 @@ static void loadConfig()
 	exec_mode = GetPrivateProfileInt("xdbg", "mode", exec_mode, iniName);
 	debug_if = GetPrivateProfileInt("xdbg", "debug_if", debug_if, iniName);
 	api_hook_mask = GetPrivateProfileInt("xdbg", "api_hook_mask", api_hook_mask, iniName);
-	api_hook_mask = GetPrivateProfileInt("xdbg", "inject_method", inject_method, iniName);
+	inject_method = GetPrivateProfileInt("xdbg", "inject_method", inject_method, iniName);
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved)

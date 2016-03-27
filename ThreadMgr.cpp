@@ -13,6 +13,8 @@ ThreadMgr::~ThreadMgr()
 
 bool ThreadMgr::addAllThreads(DWORD excluded)
 {
+	MutexGuard guard(&_lock);
+
 	HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
 	if (hSnapshot != INVALID_HANDLE_VALUE) {
 		THREADENTRY32 te;
@@ -38,6 +40,7 @@ bool ThreadMgr::addAllThreads(DWORD excluded)
 
 void ThreadMgr::clearThreads()
 {
+	MutexGuard guard(&_lock);
 	std::map<DWORD, HANDLE>::iterator it;
 	for (it = _threads.begin(); it != _threads.end(); it++) {
 		CloseHandle(it->second);
@@ -49,18 +52,21 @@ void ThreadMgr::clearThreads()
 HANDLE ThreadMgr::addThread(DWORD tid)
 {
 	HANDLE hThread = openThread(THREAD_ALL_ACCESS, FALSE, tid);
+	MutexGuard guard(&_lock);
 	_threads[tid] = hThread;
 	return hThread;
 }
 
 bool ThreadMgr::delThread(DWORD tid)
 {
+	MutexGuard guard(&_lock);
 	_threads.erase(tid);
 	return true;
 }
 
 void ThreadMgr::suspendAll(DWORD excluded)
 {
+	MutexGuard guard(&_lock);
 	std::map<DWORD, HANDLE>::iterator it;
 	for (it = _threads.begin(); it != _threads.end(); it++) {
 		if (it->first == excluded)
@@ -71,6 +77,7 @@ void ThreadMgr::suspendAll(DWORD excluded)
 
 void ThreadMgr::resumeAll(DWORD excluded)
 {
+	MutexGuard guard(&_lock);
 	std::map<DWORD, HANDLE>::iterator it;
 	for (it = _threads.begin(); it != _threads.end(); it++) {
 		if (it->first == excluded)
@@ -81,6 +88,7 @@ void ThreadMgr::resumeAll(DWORD excluded)
 
 HANDLE ThreadMgr::threadIdToHandle(DWORD tid)
 {
+	MutexGuard guard(&_lock);
 	std::map<DWORD, HANDLE>::iterator it;
 	it = _threads.find(tid);
 	if (it == _threads.end())
@@ -90,6 +98,7 @@ HANDLE ThreadMgr::threadIdToHandle(DWORD tid)
 
 DWORD ThreadMgr::threadHandleToId(HANDLE handle)
 {
+	MutexGuard guard(&_lock);
 	std::map<DWORD, HANDLE>::iterator it;
 	for (it = _threads.begin(); it != _threads.end(); it++) {
 		if (it->second == handle)

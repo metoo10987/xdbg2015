@@ -445,6 +445,12 @@ NTSTATUS(NTAPI * Real_NtQueryInformationProcess)(
 	= (NTSTATUS(NTAPI * )(HANDLE, ULONG_PTR, PVOID, ULONG, PULONG))
 	GetProcAddress(GetModuleHandle("ntdll.dll"), "NtQueryInformationProcess");
 
+DWORD(__stdcall * Real_SuspendThread)(HANDLE a0)
+= SuspendThread;
+
+DWORD(__stdcall * Real_ResumeThread)(HANDLE a0)
+= ResumeThread;
+
 //////////////////////////////////////////////////////////////////////////
 BOOL __stdcall Mine_CreateProcessA(LPCSTR a0,
 	LPSTR a1,
@@ -557,18 +563,22 @@ BOOL __stdcall Mine_DebugActiveProcess(DWORD a0)
 		return Real_DebugActiveProcess(a0);
 
 	XDbgController& dbgctl = XDbgController::instance();
+	if (!dbgctl.injectDll(a0, dbgctl.getModuleHandle())) {
+		MyTrace("%s(): injectDll() failed.", __FUNCTION__);		
+	}
+
 	int i;
 	for (i = 30; i > 0; i--) {
-		if (dbgctl.injectDll(a0, dbgctl.getModuleHandle())) {
-			// MyTrace("%s(): injectDll() failed.", __FUNCTION__);
+		if (dbgctl.attach(a0, GetProcessMainThread(a0)))
 			break;
-		}
+
+		Sleep(100);
 	}
 
 	if (i == 0)
 		return FALSE;
 
-	return dbgctl.attach(a0, GetProcessMainThread(a0)) ? TRUE : FALSE;
+	return TRUE;
 }
 
 BOOL __stdcall Mine_DebugActiveProcessStop(DWORD a0)
@@ -746,6 +756,9 @@ BOOL __stdcall Mine_GetThreadContext(HANDLE a0,
 	return TRUE;
 }
 
+DWORD __stdcall Mine_SuspendThread(HANDLE a0);
+DWORD __stdcall Mine_ResumeThread(HANDLE a0);
+
 bool XDbgController::hookDbgApi()
 {
 	DetourTransactionBegin();
@@ -767,6 +780,14 @@ bool XDbgController::hookDbgApi()
 
 	if (api_hook_mask & ID_WriteProcessMemory) {
 		DetourAttach(&(PVOID&)Real_WriteProcessMemory, &(PVOID&)Mine_WriteProcessMemory);
+	}
+
+	if (api_hook_mask & ID_SuspendThread) {
+		DetourAttach(&(PVOID&)Real_SuspendThread, &(PVOID&)Mine_SuspendThread);		
+	}
+
+	if (api_hook_mask & ID_ResumeThread) {
+		DetourAttach(&(PVOID&)Real_ResumeThread, &(PVOID&)Mine_ResumeThread);
 	}
 
 	return DetourTransactionCommit() == NO_ERROR;
@@ -887,7 +908,8 @@ bool XDbgController::readMemory(LPCVOID lpBaseAddress, PVOID lpBuffer, size_t nS
 			break;
 	}
 
-	*lpNumberOfBytesRead = readlen;
+	if (lpNumberOfBytesRead)
+		*lpNumberOfBytesRead = readlen;
 	return true;
 }
 
@@ -928,7 +950,8 @@ bool XDbgController::writeMemory(LPVOID lpBaseAddress, LPCVOID lpBuffer, size_t 
 			break;
 	}
 
-	*lpNumberOfBytesWritten = writtenlen;
+	if (lpNumberOfBytesWritten)
+		*lpNumberOfBytesWritten = writtenlen;
 	return true;
 }
 
@@ -1008,4 +1031,47 @@ NTSTATUS NTAPI Mine_NtQueryInformationProcess(
 
 {
 	return 0;
+}
+
+DWORD XDbgController::suspendThread(HANDLE hThread)
+{
+	ApiCallPacket outPkt;
+	ApiReturnPakcet inPkt;
+	outPkt.apiId = ID_SuspendThread;
+
+	DWORD pid;
+	outPkt.SuspendThread.threadId = GetThreadIdFromHandle(hThread, &pid);
+	if (outPkt.SuspendThread.threadId == 0)
+		return -1;
+
+	if (pid != getProcessId())
+		return ::Real_SuspendThread(hThread);
+
+	sendApiCall(outPkt, inPkt);
+	return inPkt.SuspendThread.result;
+}
+
+DWORD XDbgController::resumeThread(HANDLE hThread)
+{
+	ApiCallPacket outPkt;
+	ApiReturnPakcet inPkt;
+	outPkt.apiId = ID_ResumeThread;
+	DWORD pid;
+	outPkt.ResumeThread.threadId = GetThreadIdFromHandle(hThread, &pid);
+	if (outPkt.ResumeThread.threadId == 0)
+		return -1;
+	if (pid != getProcessId())
+		return ::Real_ResumeThread(hThread);
+	sendApiCall(outPkt, inPkt);
+	return inPkt.ResumeThread.result;
+}
+
+DWORD __stdcall Mine_SuspendThread(HANDLE a0)
+{
+	return XDbgController::instance().suspendThread(a0);
+}
+
+DWORD __stdcall Mine_ResumeThread(HANDLE a0)
+{
+	return XDbgController::instance().resumeThread(a0);
 }

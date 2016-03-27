@@ -2,8 +2,7 @@
 #include <map>
 #include <assert.h>
 #include "Lock.h"
-class ThreadMgr
-{
+class ThreadMgr {
 public:
 	ThreadMgr();
 	~ThreadMgr();
@@ -54,7 +53,7 @@ protected:
 
 protected:
 	std::map<DWORD, HANDLE>	_threads;
-
+	Mutex					_lock;
 	mutable std::map<DWORD, HANDLE>::const_iterator _cursor;
 };
 
