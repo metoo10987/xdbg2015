@@ -26,7 +26,33 @@ bool (* plugin_menuclear)(int hMenu);
 void (* plugin_logprintf)(const char* format, ...);
 
 bool preparePlugin();
+void ResiserListViewClass();
 
+extern HWND(__stdcall * Real_CreateWindowExW)(DWORD a0,
+	LPCWSTR a1,
+	LPCWSTR a2,
+	DWORD a3,
+	int a4,
+	int a5,
+	int a6,
+	int a7,
+	HWND a8,
+	HMENU a9,
+	HINSTANCE a10,
+	LPVOID a11);
+
+HWND __stdcall Mine_CreateWindowExW(DWORD a0,
+	LPCWSTR lpClassName,
+	LPCWSTR a2,
+	DWORD a3,
+	int a4,
+	int a5,
+	int a6,
+	int a7,
+	HWND a8,
+	HMENU a9,
+	HINSTANCE a10,
+	LPVOID a11);
 //////////////////////////////////////////////////////////////////////////
 
 static void loadConfig()
@@ -66,10 +92,18 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved)
 			if (!XDbgProxy::instance().initialize()) {
 				// log error
 				assert(false);
+				return FALSE;
 			}
 
 			// XDbgProxy::instance().waitForAttach();
-
+		} else if (exec_mode == 2) {
+			ResiserListViewClass();
+			DetourTransactionBegin();
+			DetourAttach(&(PVOID&)Real_CreateWindowExW, &(PVOID&)Mine_CreateWindowExW);
+			DetourTransactionCommit();
+		} else {
+			assert(false);
+			return FALSE;
 		}
 	}
 	
@@ -175,4 +209,59 @@ void attachHandler(CBTYPE type, PLUG_CB_ATTACH* info)
 {
 	if (debug_if == 0)
 		plugin_logprintf("Current debug engine is XDbg\n");
+}
+
+//////////////////////////////////////////////////////////////////////////
+// mode 2
+
+#define LISTVIEW_CLASS			L"SysListView32"
+#define MY_LISTVIEW_CLASS		L"XDBGLV"
+
+void ResiserListViewClass()
+{
+	WNDCLASSW wndCls;
+	if (!GetClassInfoW(NULL, LISTVIEW_CLASS, &wndCls)) {
+		assert(false);
+	}
+
+	wndCls.lpszClassName = MY_LISTVIEW_CLASS;
+	if (RegisterClassW(&wndCls) == 0) {
+		assert(false);
+	}
+}
+
+HWND(__stdcall * Real_CreateWindowExW)(DWORD a0,
+	LPCWSTR a1,
+	LPCWSTR a2,
+	DWORD a3,
+	int a4,
+	int a5,
+	int a6,
+	int a7,
+	HWND a8,
+	HMENU a9,
+	HINSTANCE a10,
+	LPVOID a11)
+	= CreateWindowExW;
+
+HWND __stdcall Mine_CreateWindowExW(DWORD a0,
+	LPCWSTR lpClassName,
+	LPCWSTR a2,
+	DWORD a3,
+	int a4,
+	int a5,
+	int a6,
+	int a7,
+	HWND a8,
+	HMENU a9,
+	HINSTANCE a10,
+	LPVOID a11)
+{
+	MyTrace("%s() classname: %S", __FUNCTION__, lpClassName);
+	if (lstrcmpW(lpClassName, LISTVIEW_CLASS) == 0) {
+		lpClassName = MY_LISTVIEW_CLASS;
+		MyTrace("%s() new classname: %S", __FUNCTION__, lpClassName);
+	}
+
+	return Real_CreateWindowExW(a0, lpClassName, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11);
 }
