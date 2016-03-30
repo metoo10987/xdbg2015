@@ -441,7 +441,7 @@ BOOL ModifyExe()
 	DWORD oldProt;
 	//VirtualProtect(dosHdr, sizeof(*dosHdr), PAGE_READWRITE, &oldProt);
 	// WriteProcessMemory(GetCurrentProcess(), ntHdrs, buf, sizeof(*ntHdrs), &len);
-	//VirtualProtect(ntHdrs, sizeof(*ntHdrs), PAGE_READWRITE, &oldProt);
+	VirtualProtect(ntHdrs, sizeof(*ntHdrs), PAGE_READWRITE, &oldProt);	
 	// WriteProcessMemory(GetCurrentProcess(), dosHdr, buf, sizeof(*dosHdr), &len);
 	// memset(ntHdrs, 0, sizeof(*ntHdrs));
 	// memset(dosHdr, 0, sizeof(*dosHdr));
@@ -451,6 +451,10 @@ BOOL ModifyExe()
 	/* for (size_t i = 0; i < ntHdrs->FileHeader.NumberOfSections; i++) {
 			
 	} */
+
+	ntHdrs->FileHeader.NumberOfSections = 0;
+	ntHdrs->OptionalHeader.SizeOfImage = 0;
+	ntHdrs->OptionalHeader.ImageBase = 0;
 
 	PLIST_ENTRY entry;
 	PLIST_ENTRY moduleListHead;
@@ -472,11 +476,18 @@ BOOL ModifyExe()
 			*/
 			entry->Flink->Blink = entry->Blink;
 			entry->Blink->Flink = entry->Flink;
+
+			ULONG_PTR peb = (ULONG_PTR)_GetCurrentPeb();
+			ULONG_PTR* imageBase = (ULONG_PTR*)(peb + 8);
+			module = CONTAINING_RECORD(entry->Flink, LDR_DATA_TABLE_ENTRY, InMemoryOrderModuleList);
+			*imageBase = (ULONG_PTR )module->DllBase;
+			HMODULE hMod2 = GetModuleHandle(NULL);
 			break;
 		}
 
 		entry = entry->Flink;
 	}
+
 #endif 
 	return TRUE;
 }
