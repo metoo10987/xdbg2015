@@ -1,18 +1,6 @@
 #pragma once
 #include <string>
 
-template<typename T>
-void* CastProcAddr(T p)
-{
-	union u {
-		T		var;
-		void*	f;
-	} u1;
-
-	u1.var = p;
-	return u1.f;
-};
-
 static inline std::string makePipeName(DWORD pid)
 {
 	char buf[256];

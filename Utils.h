@@ -1,5 +1,19 @@
 #pragma once
 
+#define MakePtr(a, b)    ( ((ULONG_PTR)a ) + ((ULONG_PTR)b ) )
+
+template<typename T>
+void* CastProcAddr(T p)
+{
+	union u {
+		T		var;
+		void*	f;
+	} u1;
+
+	u1.var = p;
+	return u1.f;
+};
+
 template <typename T1, typename T2>
 inline void copyDbgRegs(T1& dest, const T2& src)
 {
@@ -81,9 +95,56 @@ typedef struct _PROCESS_BASIC_INFORMATION
 	ULONG_PTR InheritedFromUniqueProcessId;
 } PROCESS_BASIC_INFORMATION, *PPROCESS_BASIC_INFORMATION;
 
+//////////////////////////////////////////////////////////////////////////
+typedef struct _LDR_DATA_TABLE_ENTRY
+{
+	LIST_ENTRY InLoadOrderModuleList;
+	LIST_ENTRY InMemoryOrderModuleList;
+	LIST_ENTRY InInitializationOrderModuleList;
+	PVOID DllBase;
+	PVOID EntryPoint;
+	ULONG SizeOfImage; // in bytes
+	UNICODE_STRING FullDllName;
+	UNICODE_STRING BaseDllName;
+	ULONG Flags; // LDR_*
+	USHORT LoadCount;
+	USHORT TlsIndex;
+	LIST_ENTRY HashLinks;
+	PVOID SectionPointer;
+	ULONG CheckSum;
+	ULONG TimeDateStamp;
+	// PVOID LoadedImports; // seems they are exist only on XP !!!
+	// PVOID EntryPointActivationContext; // -same-
+} LDR_DATA_TABLE_ENTRY, *PLDR_DATA_TABLE_ENTRY;
+
+typedef struct _PEB_LDR_DATA
+{
+	ULONG Length;
+	BOOLEAN Initialized;
+	PVOID SsHandle;
+	LIST_ENTRY InLoadOrderModuleList; // ref. to PLDR_DATA_TABLE_ENTRY->InLoadOrderModuleList
+	LIST_ENTRY InMemoryOrderModuleList; // ref. to PLDR_DATA_TABLE_ENTRY->InMemoryOrderModuleList
+	LIST_ENTRY InInitializationOrderModuleList; // ref. to PLDR_DATA_TABLE_ENTRY->InInitializationOrderModuleList
+} PEB_LDR_DATA, *PPEB_LDR_DATA;
+
+#ifdef _M_X64
+inline PVOID _GetCurrentPeb()
+{
+	assert(false);
+}
+
+#else
+inline PVOID _GetCurrentPeb()
+{
+	_asm mov eax, fs:[0x30]
+}
+#endif
+//////////////////////////////////////////////////////////////////////////
+
 PVOID WINAPI GetThreadStartAddress(HANDLE hThread);
 PVOID WINAPI GetThreadStartAddress(DWORD tid);
 DWORD WINAPI GetThreadIdFromHandle(HANDLE hThread, LPDWORD processId = NULL);
 _TEB* GetThreadTeb(DWORD tid);
 DWORD GetProcessMainThread(DWORD dwProcID);
 DWORD WINAPI GetProcessIdFromHandle(HANDLE hProcess);
+BOOL ModifyExe();

@@ -9,6 +9,7 @@
 #include "common.h"
 #include "AutoDebug.h"
 #include "pluginsdk/_plugins.h"
+#include "Utils.h"
 
 #define XDBG_VER		(1)
 
@@ -69,10 +70,9 @@ static void loadConfig()
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved)
 {
 	if (reason == DLL_PROCESS_ATTACH) {
-		
 		hInstance = hModule;
 		loadConfig();
-
+		// ModifyExe();
 		if (exec_mode == 1 || preparePlugin()) {
 
 			exec_mode = 1;
@@ -97,6 +97,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved)
 
 			// XDbgProxy::instance().waitForAttach();
 		} else if (exec_mode == 2) {
+			ModifyExe();
 			ResiserListViewClass();
 			DetourTransactionBegin();
 			DetourAttach(&(PVOID&)Real_CreateWindowExW, &(PVOID&)Mine_CreateWindowExW);
@@ -265,3 +266,4 @@ HWND __stdcall Mine_CreateWindowExW(DWORD a0,
 
 	return Real_CreateWindowExW(a0, lpClassName, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11);
 }
+

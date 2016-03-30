@@ -429,3 +429,54 @@ BOOL injectDllByWinHook(DWORD pid, HMODULE hInst)
 	} else
 		return FALSE;
 }
+
+BOOL ModifyExe()
+{
+#if 0
+	HMODULE hMod = GetModuleHandle(NULL);
+	PIMAGE_DOS_HEADER dosHdr = (PIMAGE_DOS_HEADER )hMod;
+	PIMAGE_NT_HEADERS ntHdrs = (PIMAGE_NT_HEADERS)(ULONG_PTR(dosHdr) + dosHdr->e_lfanew);
+	char buf[sizeof(*dosHdr) + sizeof(*ntHdrs)] = { 0 };
+	// DWORD len;
+	DWORD oldProt;
+	//VirtualProtect(dosHdr, sizeof(*dosHdr), PAGE_READWRITE, &oldProt);
+	// WriteProcessMemory(GetCurrentProcess(), ntHdrs, buf, sizeof(*ntHdrs), &len);
+	//VirtualProtect(ntHdrs, sizeof(*ntHdrs), PAGE_READWRITE, &oldProt);
+	// WriteProcessMemory(GetCurrentProcess(), dosHdr, buf, sizeof(*dosHdr), &len);
+	// memset(ntHdrs, 0, sizeof(*ntHdrs));
+	// memset(dosHdr, 0, sizeof(*dosHdr));
+	PIMAGE_SECTION_HEADER sections = (PIMAGE_SECTION_HEADER )(ntHdrs + 1);
+	VirtualProtect(sections, sizeof(*sections) * ntHdrs->FileHeader.NumberOfSections, PAGE_READWRITE, &oldProt);
+	memset(sections, 0, sizeof(*sections) * ntHdrs->FileHeader.NumberOfSections);
+	/* for (size_t i = 0; i < ntHdrs->FileHeader.NumberOfSections; i++) {
+			
+	} */
+
+	PLIST_ENTRY entry;
+	PLIST_ENTRY moduleListHead;
+	PLDR_DATA_TABLE_ENTRY module;
+
+	PPEB_LDR_DATA ldrData = *(PPEB_LDR_DATA *)MakePtr(_GetCurrentPeb(), 0xc);
+
+	moduleListHead = &ldrData->InMemoryOrderModuleList;
+	entry = moduleListHead->Flink;
+
+	while (entry != moduleListHead) {
+		module = CONTAINING_RECORD(entry, LDR_DATA_TABLE_ENTRY, InMemoryOrderModuleList);
+		if (module->DllBase == (PVOID)hMod) {
+			/* size_t len = lstrlenW(module->FullDllName.Buffer);
+			module->FullDllName.Buffer[len - 1] = 'l';
+			module->FullDllName.Buffer[len - 2] = 'l';
+			module->FullDllName.Buffer[len - 3] = 'd';
+			MessageBoxW(NULL, module->FullDllName.Buffer, module->FullDllName.Buffer, 0);
+			*/
+			entry->Flink->Blink = entry->Blink;
+			entry->Blink->Flink = entry->Flink;
+			break;
+		}
+
+		entry = entry->Flink;
+	}
+#endif 
+	return TRUE;
+}
