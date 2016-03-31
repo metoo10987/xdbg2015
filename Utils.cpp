@@ -430,12 +430,35 @@ BOOL injectDllByWinHook(DWORD pid, HMODULE hInst)
 		return FALSE;
 }
 
+static PVOID mallocRecSec(PVOID base, SIZE_T size)
+{
+	return VirtualAlloc((PVOID)0x20000000, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+}
+
 BOOL ModifyExe()
 {
-#if 0
 	HMODULE hMod = GetModuleHandle(NULL);
 	PIMAGE_DOS_HEADER dosHdr = (PIMAGE_DOS_HEADER )hMod;
 	PIMAGE_NT_HEADERS ntHdrs = (PIMAGE_NT_HEADERS)(ULONG_PTR(dosHdr) + dosHdr->e_lfanew);
+	PIMAGE_SECTION_HEADER sections = (PIMAGE_SECTION_HEADER )(ntHdrs + 1);
+	PVOID resSec = NULL;
+	for (size_t i = 0; i < ntHdrs->FileHeader.NumberOfSections; i++) {
+		if (strcmp((char* )sections[i].Name, ".rsrc") == 0) {
+			resSec = mallocRecSec(hMod, sections[i].Misc.VirtualSize);
+			PVOID secAddr = (PVOID )MakePtr(hMod, sections[i].VirtualAddress);
+			memcpy(resSec, secAddr, sections[i].Misc.VirtualSize);;
+			memset(secAddr, 0, sections[i].Misc.VirtualSize);
+			break;
+		}
+	}
+
+	DWORD oldProt;
+	VirtualProtect(ntHdrs, sizeof(*ntHdrs), PAGE_READWRITE, &oldProt);
+	(PVOID &)ntHdrs->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_RESOURCE].VirtualAddress = 
+		PVOID((ULONG_PTR)resSec - (ULONG_PTR)hMod);
+	VirtualProtect(ntHdrs, sizeof(*ntHdrs), oldProt, &oldProt);
+
+#if 0
 	char buf[sizeof(*dosHdr) + sizeof(*ntHdrs)] = { 0 };
 	// DWORD len;
 	DWORD oldProt;
@@ -445,12 +468,10 @@ BOOL ModifyExe()
 	// WriteProcessMemory(GetCurrentProcess(), dosHdr, buf, sizeof(*dosHdr), &len);
 	// memset(ntHdrs, 0, sizeof(*ntHdrs));
 	// memset(dosHdr, 0, sizeof(*dosHdr));
-	PIMAGE_SECTION_HEADER sections = (PIMAGE_SECTION_HEADER )(ntHdrs + 1);
+
 	VirtualProtect(sections, sizeof(*sections) * ntHdrs->FileHeader.NumberOfSections, PAGE_READWRITE, &oldProt);
 	memset(sections, 0, sizeof(*sections) * ntHdrs->FileHeader.NumberOfSections);
-	/* for (size_t i = 0; i < ntHdrs->FileHeader.NumberOfSections; i++) {
-			
-	} */
+	
 
 	ntHdrs->FileHeader.NumberOfSections = 0;
 	ntHdrs->OptionalHeader.SizeOfImage = 0;

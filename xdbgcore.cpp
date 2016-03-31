@@ -28,32 +28,8 @@ void (* plugin_logprintf)(const char* format, ...);
 
 bool preparePlugin();
 void ResiserListViewClass();
+void initMode2();
 
-extern HWND(__stdcall * Real_CreateWindowExW)(DWORD a0,
-	LPCWSTR a1,
-	LPCWSTR a2,
-	DWORD a3,
-	int a4,
-	int a5,
-	int a6,
-	int a7,
-	HWND a8,
-	HMENU a9,
-	HINSTANCE a10,
-	LPVOID a11);
-
-HWND __stdcall Mine_CreateWindowExW(DWORD a0,
-	LPCWSTR lpClassName,
-	LPCWSTR a2,
-	DWORD a3,
-	int a4,
-	int a5,
-	int a6,
-	int a7,
-	HWND a8,
-	HMENU a9,
-	HINSTANCE a10,
-	LPVOID a11);
 //////////////////////////////////////////////////////////////////////////
 
 static void loadConfig()
@@ -97,11 +73,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved)
 
 			// XDbgProxy::instance().waitForAttach();
 		} else if (exec_mode == 2) {
-			ModifyExe();
-			ResiserListViewClass();
-			DetourTransactionBegin();
-			DetourAttach(&(PVOID&)Real_CreateWindowExW, &(PVOID&)Mine_CreateWindowExW);
-			DetourTransactionCommit();
+			initMode2();
 		} else {
 			assert(false);
 			return FALSE;
@@ -258,12 +230,50 @@ HWND __stdcall Mine_CreateWindowExW(DWORD a0,
 	HINSTANCE a10,
 	LPVOID a11)
 {
-	MyTrace("%s() classname: %S", __FUNCTION__, lpClassName);
+	// MyTrace("%s() classname: %S", __FUNCTION__, lpClassName);
 	if (lstrcmpW(lpClassName, LISTVIEW_CLASS) == 0) {
 		lpClassName = MY_LISTVIEW_CLASS;
-		MyTrace("%s() new classname: %S", __FUNCTION__, lpClassName);
+		// MyTrace("%s() new classname: %S", __FUNCTION__, lpClassName);
 	}
 
 	return Real_CreateWindowExW(a0, lpClassName, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11);
 }
 
+HRSRC(__stdcall * Real_FindResourceExW)(HMODULE a0,
+	LPCWSTR a1,
+	LPCWSTR a2,
+	WORD a3)
+	= FindResourceExW;
+
+HRSRC(__stdcall * Real_FindResourceExA)(HMODULE a0,
+	LPCSTR a1,
+	LPCSTR a2,
+	WORD a3)
+	= FindResourceExA;
+
+HRSRC __stdcall Mine_FindResourceExA(HMODULE a0,
+	LPCSTR a1,
+	LPCSTR a2,
+	WORD a3)
+{
+	return Real_FindResourceExA(a0, a1, a2, a3);
+}
+
+HRSRC __stdcall Mine_FindResourceExW(HMODULE a0,
+	LPCWSTR a1,
+	LPCWSTR a2,
+	WORD a3)
+{
+	return Real_FindResourceExW(a0, a1, a2, a3);
+}
+
+void initMode2()
+{
+	ModifyExe();
+	ResiserListViewClass();
+	DetourTransactionBegin();
+	DetourAttach(&(PVOID&)Real_CreateWindowExW, &(PVOID&)Mine_CreateWindowExW);
+	// DetourAttach(&(PVOID&)Real_FindResourceExA, &(PVOID&)Mine_FindResourceExA);
+	// DetourAttach(&(PVOID&)Real_FindResourceExW, &(PVOID&)Mine_FindResourceExW);
+	DetourTransactionCommit();
+}
