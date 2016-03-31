@@ -474,8 +474,15 @@ BOOL ModifyExe()
 	
 
 	ntHdrs->FileHeader.NumberOfSections = 0;
+	ntHdrs->FileHeader.SizeOfOptionalHeader = 0;
 	ntHdrs->OptionalHeader.SizeOfImage = 0;
 	ntHdrs->OptionalHeader.ImageBase = 0;
+	ntHdrs->OptionalHeader.AddressOfEntryPoint = 0;
+	ntHdrs->OptionalHeader.BaseOfCode = 0;
+	ntHdrs->OptionalHeader.BaseOfData = 0;
+	ntHdrs->OptionalHeader.SizeOfCode = 0;
+	ntHdrs->OptionalHeader.SizeOfInitializedData = 0;
+	ntHdrs->OptionalHeader.SizeOfHeaders = 0;
 
 	PLIST_ENTRY entry;
 	PLIST_ENTRY moduleListHead;
