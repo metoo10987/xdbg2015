@@ -147,4 +147,3 @@ DWORD WINAPI GetThreadIdFromHandle(HANDLE hThread, LPDWORD processId = NULL);
 _TEB* GetThreadTeb(DWORD tid);
 DWORD GetProcessMainThread(DWORD dwProcID);
 DWORD WINAPI GetProcessIdFromHandle(HANDLE hProcess);
-BOOL ModifyExe();

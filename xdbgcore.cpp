@@ -267,13 +267,110 @@ HRSRC __stdcall Mine_FindResourceExW(HMODULE a0,
 	return Real_FindResourceExW(a0, a1, a2, a3);
 }
 
+static PVOID mallocRecSec(PVOID base, SIZE_T size)
+{
+	return VirtualAlloc((PVOID)0x20000000, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+}
+
+BOOL ModifyExe()
+{
+#if 1
+	HMODULE hMod = GetModuleHandle(NULL);
+	PIMAGE_DOS_HEADER dosHdr = (PIMAGE_DOS_HEADER)hMod;
+	PIMAGE_NT_HEADERS ntHdrs = (PIMAGE_NT_HEADERS)(ULONG_PTR(dosHdr) + dosHdr->e_lfanew);
+	PIMAGE_SECTION_HEADER sections = (PIMAGE_SECTION_HEADER)(ntHdrs + 1);
+	PVOID resSec = NULL;
+	DWORD oldProt;
+
+#endif
+
+#if 0
+	// char buf[sizeof(*dosHdr) + sizeof(*ntHdrs)] = { 0 };
+	// DWORD len;
+	//VirtualProtect(dosHdr, sizeof(*dosHdr), PAGE_READWRITE, &oldProt);
+	// WriteProcessMemory(GetCurrentProcess(), ntHdrs, buf, sizeof(*ntHdrs), &len);
+	VirtualProtect(ntHdrs, sizeof(*ntHdrs), PAGE_READWRITE, &oldProt);
+	// WriteProcessMemory(GetCurrentProcess(), dosHdr, buf, sizeof(*dosHdr), &len);
+	// memset(ntHdrs, 0, sizeof(*ntHdrs));
+	// memset(dosHdr, 0, sizeof(*dosHdr));
+
+	// VirtualProtect(sections, sizeof(*sections) * ntHdrs->FileHeader.NumberOfSections, PAGE_READWRITE, &oldProt);
+	// memset(sections, 0, sizeof(*sections) * ntHdrs->FileHeader.NumberOfSections);
+
+
+	// ntHdrs->FileHeader.NumberOfSections = 0;
+	ntHdrs->FileHeader.SizeOfOptionalHeader = 0;
+	ntHdrs->OptionalHeader.SizeOfImage = 0;
+	ntHdrs->OptionalHeader.ImageBase = 0;
+	ntHdrs->OptionalHeader.AddressOfEntryPoint = 0;
+	ntHdrs->OptionalHeader.BaseOfCode = 0;
+	ntHdrs->OptionalHeader.BaseOfData = 0;
+	ntHdrs->OptionalHeader.SizeOfCode = 0;
+	ntHdrs->OptionalHeader.SizeOfInitializedData = 0;
+	ntHdrs->OptionalHeader.SizeOfHeaders = 0;
+
+	PLIST_ENTRY entry;
+	PLIST_ENTRY moduleListHead;
+	PLDR_DATA_TABLE_ENTRY module;
+
+	PPEB_LDR_DATA ldrData = *(PPEB_LDR_DATA *)MakePtr(_GetCurrentPeb(), 0xc);
+
+	moduleListHead = &ldrData->InMemoryOrderModuleList;
+	entry = moduleListHead->Flink;
+
+	while (entry != moduleListHead) {
+		module = CONTAINING_RECORD(entry, LDR_DATA_TABLE_ENTRY, InMemoryOrderModuleList);
+		if (module->DllBase == (PVOID)hMod) {
+			/* size_t len = lstrlenW(module->FullDllName.Buffer);
+			module->FullDllName.Buffer[len - 1] = 'l';
+			module->FullDllName.Buffer[len - 2] = 'l';
+			module->FullDllName.Buffer[len - 3] = 'd';
+			MessageBoxW(NULL, module->FullDllName.Buffer, module->FullDllName.Buffer, 0);
+			*/
+			entry->Flink->Blink = entry->Blink;
+			entry->Blink->Flink = entry->Flink;
+
+			ULONG_PTR peb = (ULONG_PTR)_GetCurrentPeb();
+			ULONG_PTR* imageBase = (ULONG_PTR*)(peb + 8);
+			module = CONTAINING_RECORD(entry->Flink, LDR_DATA_TABLE_ENTRY, InMemoryOrderModuleList);
+			*imageBase = (ULONG_PTR)module->DllBase;
+			HMODULE hMod2 = GetModuleHandle(NULL);
+			break;
+		}
+
+		entry = entry->Flink;
+	}
+
+#endif 
+
+#if 1
+	for (size_t i = 0; i < ntHdrs->FileHeader.NumberOfSections; i++) {
+		if (strcmp((char*)sections[i].Name, ".rdata") == 0) {
+			// resSec = mallocRecSec(hMod, sections[i].Misc.VirtualSize);
+			PVOID secAddr = (PVOID)MakePtr(hMod, sections[i].VirtualAddress);
+			// memcpy(resSec, secAddr, sections[i].Misc.VirtualSize);
+			VirtualProtect(secAddr, sections[i].Misc.VirtualSize, PAGE_READWRITE, &oldProt);
+			memset(secAddr, 0, sections[i].Misc.VirtualSize / 8);
+			break;
+		}
+	}
+
+	//VirtualProtect(ntHdrs, sizeof(*ntHdrs), PAGE_READWRITE, &oldProt);
+	//(PVOID &)ntHdrs->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_RESOURCE].VirtualAddress =
+	//	PVOID((ULONG_PTR)resSec - (ULONG_PTR)hMod);
+	//VirtualProtect(ntHdrs, sizeof(*ntHdrs), oldProt, &oldProt);
+	DebugBreak();
+#endif
+	return TRUE;
+}
+
 void initMode2()
 {
 	ModifyExe();
 	ResiserListViewClass();
 	DetourTransactionBegin();
 	DetourAttach(&(PVOID&)Real_CreateWindowExW, &(PVOID&)Mine_CreateWindowExW);
-	// DetourAttach(&(PVOID&)Real_FindResourceExA, &(PVOID&)Mine_FindResourceExA);
-	// DetourAttach(&(PVOID&)Real_FindResourceExW, &(PVOID&)Mine_FindResourceExW);
+	DetourAttach(&(PVOID&)Real_FindResourceExA, &(PVOID&)Mine_FindResourceExA);
+	DetourAttach(&(PVOID&)Real_FindResourceExW, &(PVOID&)Mine_FindResourceExW);
 	DetourTransactionCommit();
 }
