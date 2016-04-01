@@ -272,15 +272,63 @@ static PVOID mallocRecSec(PVOID base, SIZE_T size)
 	return VirtualAlloc((PVOID)0x20000000, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 }
 
+PVOID memblockCache = NULL;
+PVOID memBase = NULL;
+
+void restoreMemory(PVOID base, ULONG_PTR offset, SIZE_T len)
+{
+	memcpy((PVOID)MakePtr(base, offset), (PVOID)MakePtr(memblockCache, offset), len);
+}
+
+
+std::vector<std::pair<ULONG_PTR, ULONG_PTR> > records;
+void prebeSign(PVOID base, SIZE_T len)
+{
+	if (len < 16)
+		return;
+
+	// MyTrace("memBase: %p, base: %p, size_t: %u", memBase, base, len);
+	PVOID addr = base;
+	SIZE_T part = len / 2;
+	memset(addr, 0, part);
+	char msg[256];
+	sprintf(msg, "memBase: %p, base: %p, part: %u. is detected?", memBase, base, part);
+	if (MessageBox(NULL, msg, msg, MB_YESNO) == IDNO) {
+		// records.push_back(std::pair<ULONG_PTR, ULONG_PTR>((ULONG_PTR)addr, (ULONG_PTR)part));
+		MyTrace("FOUND! memBase: %p, base: %p, size_t: %u", memBase, addr, part);
+		restoreMemory(memBase, (ULONG_PTR)addr - (ULONG_PTR)memBase, part);
+		prebeSign(addr, part);
+		return;
+	}
+
+	// restoreMemory(memBase, (ULONG_PTR )addr - (ULONG_PTR )memBase, part);
+
+	PVOID addr2 = (PVOID )MakePtr(base, part);
+	SIZE_T part2 = len - part;
+	memset(addr2, 0, part2);
+	sprintf(msg, "memBase: %p, base: %p, part: %u. is detected?", memBase, addr2, part2);
+	if (MessageBox(NULL, msg, msg, MB_YESNO) == IDNO) {
+		// records.push_back(std::pair<ULONG_PTR, ULONG_PTR>((ULONG_PTR)addr2, (ULONG_PTR)part2));
+		MyTrace("FOUND! memBase: %p, base: %p, size_t: %u", memBase, addr2, part2);
+		restoreMemory(memBase, (ULONG_PTR)addr2 - (ULONG_PTR)memBase, part2);
+		prebeSign(addr2, part2);
+	}
+
+	restoreMemory(base, (ULONG_PTR)base - (ULONG_PTR)memBase, len);
+}
+
 BOOL ModifyExe()
 {
-#if 1
+#if 0
 	HMODULE hMod = GetModuleHandle(NULL);
 	PIMAGE_DOS_HEADER dosHdr = (PIMAGE_DOS_HEADER)hMod;
 	PIMAGE_NT_HEADERS ntHdrs = (PIMAGE_NT_HEADERS)(ULONG_PTR(dosHdr) + dosHdr->e_lfanew);
 	PIMAGE_SECTION_HEADER sections = (PIMAGE_SECTION_HEADER)(ntHdrs + 1);
 	PVOID resSec = NULL;
 	DWORD oldProt;
+#endif
+
+#if 0
 	ULONG_PTR imgSize = ntHdrs->OptionalHeader.SizeOfImage;
 	void* buf = malloc(imgSize);
 	memcpy(buf, (void*)hMod, imgSize);
@@ -288,11 +336,12 @@ BOOL ModifyExe()
 	PVOID base = VirtualAlloc((LPVOID)hMod, imgSize, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
 	memcpy(base, buf, imgSize);
 	FlushInstructionCache(GetCurrentProcess(), base, imgSize);
-	DebugBreak();
-	return TRUE;
+	free(buf);
+	// DebugBreak();
+	// return TRUE;
 #endif
 
-#if 1
+#if 0
 	// char buf[sizeof(*dosHdr) + sizeof(*ntHdrs)] = { 0 };
 	// DWORD len;
 	//VirtualProtect(dosHdr, sizeof(*dosHdr), PAGE_READWRITE, &oldProt);
@@ -354,11 +403,56 @@ BOOL ModifyExe()
 #if 0
 	for (size_t i = 0; i < ntHdrs->FileHeader.NumberOfSections; i++) {
 		if (strcmp((char*)sections[i].Name, ".rdata") == 0) {
+
+			//* memblockCache = malloc(sections[i].Misc.VirtualSize);
+			
 			// resSec = mallocRecSec(hMod, sections[i].Misc.VirtualSize);
 			PVOID secAddr = (PVOID)MakePtr(hMod, sections[i].VirtualAddress);
+			// memcpy(memblockCache, secAddr, sections[i].Misc.VirtualSize);
+
 			// memcpy(resSec, secAddr, sections[i].Misc.VirtualSize);
 			VirtualProtect(secAddr, sections[i].Misc.VirtualSize, PAGE_READWRITE, &oldProt);
-			memset(secAddr, 0, sections[i].Misc.VirtualSize / 8);
+			//* memBase = secAddr;
+			// prebeSign(secAddr, sections[i].Misc.VirtualSize);
+
+			// 下半部分档起来
+			memset((PVOID)MakePtr(secAddr, sections[i].Misc.VirtualSize / 16 + 
+				sections[i].Misc.VirtualSize / 32),
+
+				0, sections[i].Misc.VirtualSize / 32);
+
+			// 上半部分的上半部分挡起来[X]
+			/* memset((PVOID)MakePtr(secAddr, sections[i].Misc.VirtualSize / 16),
+
+				0, sections[i].Misc.VirtualSize / 64); */
+
+			// 上半部分的下半部分挡起来[O]
+			memset((PVOID)MakePtr(secAddr, sections[i].Misc.VirtualSize / 16 + 
+				sections[i].Misc.VirtualSize / 64),
+
+			0, sections[i].Misc.VirtualSize / 256);
+
+
+
+			// SIZE_T blcokSize = sections[i].Misc.VirtualSize / 32;
+#if 0
+			// 上半部分档起来
+			memset((PVOID )MakePtr(secAddr, sections[i].Misc.VirtualSize / 16), 0, 
+				sections[i].Misc.VirtualSize / 32);
+
+
+			// 下半部分的上半部分挡起来[X]
+			/* memset((PVOID)MakePtr(secAddr, 
+				sections[i].Misc.VirtualSize / 16 + sections[i].Misc.VirtualSize / 32), 0,
+				sections[i].Misc.VirtualSize / 64); */
+
+			// 下半部分的下半部分挡起来[O]
+			memset((PVOID)MakePtr(secAddr,
+				sections[i].Misc.VirtualSize / 16 + sections[i].Misc.VirtualSize / 32 + 
+				sections[i].Misc.VirtualSize / 64), 
+
+				0, sections[i].Misc.VirtualSize / 64);
+#endif
 			break;
 		}
 	}
