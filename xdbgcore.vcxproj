@@ -171,6 +171,7 @@
     <ClCompile Include="image.cpp" />
     <ClCompile Include="Lock.cpp" />
     <ClCompile Include="modules.cpp" />
+    <ClCompile Include="PeLoader.cpp" />
     <ClCompile Include="Thread.cpp" />
     <ClCompile Include="ThreadMgr.cpp" />
     <ClCompile Include="Utils.cpp" />
@@ -189,6 +190,7 @@
     <ClInclude Include="detours.h" />
     <ClInclude Include="detver.h" />
     <ClInclude Include="Lock.h" />
+    <ClInclude Include="PeLoader.h" />
     <ClInclude Include="Thread.h" />
     <ClInclude Include="ThreadMgr.h" />
     <ClInclude Include="Utils.h" />

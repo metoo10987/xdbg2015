@@ -281,10 +281,18 @@ BOOL ModifyExe()
 	PIMAGE_SECTION_HEADER sections = (PIMAGE_SECTION_HEADER)(ntHdrs + 1);
 	PVOID resSec = NULL;
 	DWORD oldProt;
-
+	ULONG_PTR imgSize = ntHdrs->OptionalHeader.SizeOfImage;
+	void* buf = malloc(imgSize);
+	memcpy(buf, (void*)hMod, imgSize);
+	UnmapViewOfFile((LPVOID)hMod);
+	PVOID base = VirtualAlloc((LPVOID)hMod, imgSize, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+	memcpy(base, buf, imgSize);
+	FlushInstructionCache(GetCurrentProcess(), base, imgSize);
+	DebugBreak();
+	return TRUE;
 #endif
 
-#if 0
+#if 1
 	// char buf[sizeof(*dosHdr) + sizeof(*ntHdrs)] = { 0 };
 	// DWORD len;
 	//VirtualProtect(dosHdr, sizeof(*dosHdr), PAGE_READWRITE, &oldProt);
@@ -343,7 +351,7 @@ BOOL ModifyExe()
 
 #endif 
 
-#if 1
+#if 0
 	for (size_t i = 0; i < ntHdrs->FileHeader.NumberOfSections; i++) {
 		if (strcmp((char*)sections[i].Name, ".rdata") == 0) {
 			// resSec = mallocRecSec(hMod, sections[i].Misc.VirtualSize);
