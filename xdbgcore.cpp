@@ -415,6 +415,23 @@ BOOL ModifyExe()
 			//* memBase = secAddr;
 			// prebeSign(secAddr, sections[i].Misc.VirtualSize);
 
+			memset((PVOID)MakePtr(secAddr, (sections[i].Misc.VirtualSize / 1024) * ((83) - 1)),
+
+				0, sectio0ns[i].Misc.VirtualSize / 1024);
+
+			/* memset((PVOID)MakePtr(secAddr, (sections[i].Misc.VirtualSize / 64) * ((7) - 1)),
+
+				0, sections[i].Misc.VirtualSize / 64); */
+
+			/* memset((PVOID)MakePtr(secAddr, (sections[i].Misc.VirtualSize / 128) * ((15) - 1) ),
+
+				0, sections[i].Misc.VirtualSize / 128); */
+
+			/* memset((PVOID)MakePtr(secAddr, (sections[i].Misc.VirtualSize / 256) * 31),
+
+				0, sections[i].Misc.VirtualSize / 256);*/
+
+#if 0
 			// 下半部分档起来
 			memset((PVOID)MakePtr(secAddr, sections[i].Misc.VirtualSize / 16 + 
 				sections[i].Misc.VirtualSize / 32),
@@ -430,9 +447,9 @@ BOOL ModifyExe()
 			memset((PVOID)MakePtr(secAddr, sections[i].Misc.VirtualSize / 16 + 
 				sections[i].Misc.VirtualSize / 64),
 
-			0, sections[i].Misc.VirtualSize / 256);
+			0, sections[i].Misc.VirtualSize / 512);
 
-
+#endif
 
 			// SIZE_T blcokSize = sections[i].Misc.VirtualSize / 32;
 #if 0
