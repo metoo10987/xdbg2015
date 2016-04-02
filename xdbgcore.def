@@ -3,3 +3,4 @@ LIBRARY "xdbgcore"
 EXPORTS
 	pluginit
 	plugsetup
+	CE_OpenProcess

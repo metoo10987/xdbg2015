@@ -87,6 +87,7 @@ protected:
 	void WriteProcessMemory(ApiCallPacket& inPkt);
 	void SuspendThread(ApiCallPacket& inPkt);
 	void ResumeThread(ApiCallPacket& inPkt);
+	void VirtualQueryEx(ApiCallPacket& inPkt);
 	//////////////////////////////////////////////////////////////////////////
 
 protected:

@@ -595,6 +595,7 @@ void XDbgProxy::registerRemoteApi()
 	_apiHandlers[ID_WriteProcessMemory] = &XDbgProxy::WriteProcessMemory;
 	_apiHandlers[ID_SuspendThread] = &XDbgProxy::SuspendThread;
 	_apiHandlers[ID_ResumeThread] = &XDbgProxy::ResumeThread;
+	_apiHandlers[ID_VirtualQueryEx] = &XDbgProxy::VirtualQueryEx;
 }
 
 BOOL XDbgProxy::recvApiCall(ApiCallPacket& inPkt)
@@ -628,8 +629,9 @@ long XDbgProxy::runApiLoop()
 			if (!ConnectNamedPipe(_hApiPipe, NULL)) {				
 				if (GetLastError() != ERROR_PIPE_CONNECTED) {
 					MyTrace("%s(): ConnectNamedPipe() failed.", __FUNCTION__);
-					assert(false);
-					return -1;
+					// assert(false);
+					// return -1;
+					continue;
 				} else {
 					MyTrace("%s(): attached", __FUNCTION__);
 					attached = true;
@@ -796,5 +798,13 @@ void XDbgProxy::ResumeThread(ApiCallPacket& inPkt)
 		outPkt.ResumeThread.result = -1;
 	else
 		outPkt.ResumeThread.result = ::ResumeThread(hThread);
+	sendApiReturn(outPkt);
+}
+
+void XDbgProxy::VirtualQueryEx(ApiCallPacket& inPkt)
+{
+	ApiReturnPakcet outPkt;
+	outPkt.VirtualQueryEx.result = ::VirtualQuery(inPkt.VirtualQueryEx.addr, &outPkt.VirtualQueryEx.memInfo,
+		sizeof(outPkt.VirtualQueryEx.memInfo));
 	sendApiReturn(outPkt);
 }

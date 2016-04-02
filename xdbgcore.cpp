@@ -486,10 +486,44 @@ BOOL ModifyExe()
 void initMode2()
 {
 	ModifyExe();
+	inject_method = 1; // WIN HOOK
+	api_hook_mask = ID_ReadProcessMemory | ID_WriteProcessMemory | ID_VirtualQueryEx;
+	MyTrace("xdbgcore initializing. mode: 2");
+	if (!XDbgController::instance().initialize(hInstance, true)) {
+		// log error
+		assert(false);
+	}
+
 	ResiserListViewClass();
 	DetourTransactionBegin();
 	DetourAttach(&(PVOID&)Real_CreateWindowExW, &(PVOID&)Mine_CreateWindowExW);
 	DetourAttach(&(PVOID&)Real_FindResourceExA, &(PVOID&)Mine_FindResourceExA);
 	DetourAttach(&(PVOID&)Real_FindResourceExW, &(PVOID&)Mine_FindResourceExW);
 	DetourTransactionCommit();
+}
+
+BOOL WINAPI CE_OpenProcess(DWORD pid)
+{
+	MyTrace("%s()", __FUNCTION__);
+	XDbgController& dbgctl = XDbgController::instance();
+	if (!dbgctl.injectDll(pid, dbgctl.getModuleHandle())) {
+		MyTrace("%s(): injectDll() failed.", __FUNCTION__);
+	}
+
+	dbgctl.disconnectRemoteApi();
+	int i;
+	for (i = 30; i > 0; i--) {
+		if (dbgctl.connectRemoteApi(pid))
+			break;
+
+		Sleep(100);
+	}
+
+	if (i == 0) {
+		assert(false);
+		// log error
+		return FALSE;
+	}
+
+	return TRUE;
 }

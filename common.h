@@ -65,6 +65,7 @@ void _MyTrace(LPCSTR fmt, ...);
 #define ID_WriteProcessMemory			(0x00000002)
 #define ID_SuspendThread				(0x00000004)
 #define ID_ResumeThread					(0x00000008)
+#define ID_VirtualQueryEx				(0x00000010)
 
 #define CALL_MESSAGE_SIZE		sizeof(ApiCallPacket)
 #define RETURN_MESSAGE_SIZE		sizeof(ApiReturnPakcet)
@@ -92,6 +93,10 @@ struct ApiCallPacket {
 		struct  {
 			DWORD		threadId;
 		} ResumeThread;
+
+		struct {
+			PVOID		addr;
+		} VirtualQueryEx;
 	};
 };
 
@@ -117,6 +122,11 @@ struct ApiReturnPakcet {
 		struct  {
 			DWORD		result;
 		} ResumeThread;
+
+		struct {
+			SIZE_T						result;
+			MEMORY_BASIC_INFORMATION	memInfo;
+		} VirtualQueryEx;
 	};	
 };
 

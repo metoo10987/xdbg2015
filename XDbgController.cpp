@@ -67,6 +67,32 @@ bool XDbgController::connectInferior(DWORD pid)
 	return true;
 }
 
+bool XDbgController::connectRemoteApi(DWORD pid)
+{
+	std::string apiName = makeApiPipeName(pid);
+	_hApiPipe = CreateFile(apiName.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
+		0 /*FILE_FLAG_OVERLAPPED*/, NULL);
+
+	if (_hApiPipe == INVALID_HANDLE_VALUE) {
+		MyTrace("%s() cannot connect to '%s'(api pipe)", __FUNCTION__, apiName.c_str());
+		return false;
+	}
+
+	MyTrace("%s(): hApiPipe = %x", __FUNCTION__, _hApiPipe);
+	_pid = pid;
+	return true;
+}
+
+void XDbgController::disconnectRemoteApi()
+{
+	if (_hApiPipe != INVALID_HANDLE_VALUE) {
+		CloseHandle(_hApiPipe);
+		_hApiPipe = NULL;
+	}
+
+	_pid = 0;
+}
+
 void XDbgController::disconnectInferior()
 {
 	if (_hPipe != INVALID_HANDLE_VALUE) {
@@ -674,6 +700,11 @@ BOOL __stdcall Mine_WriteProcessMemory(HANDLE a0,
 	DWORD_PTR a3,
 	PDWORD_PTR a4);
 
+DWORD_PTR __stdcall Mine_VirtualQueryEx(HANDLE a0,
+	LPCVOID a1,
+	PMEMORY_BASIC_INFORMATION a2,
+	DWORD_PTR a3);
+
 BOOL __stdcall Mine_WaitForDebugEvent(LPDEBUG_EVENT a0,
 	DWORD a1)
 {
@@ -790,6 +821,10 @@ bool XDbgController::hookDbgApi()
 		DetourAttach(&(PVOID&)Real_ResumeThread, &(PVOID&)Mine_ResumeThread);
 	}
 
+	if (api_hook_mask & ID_VirtualQueryEx) {
+		DetourAttach(&(PVOID&)Real_VirtualQueryEx, &(PVOID&)Mine_VirtualQueryEx);		
+	}
+
 	return DetourTransactionCommit() == NO_ERROR;
 }
 
@@ -871,7 +906,15 @@ bool XDbgController::setMemoryProtection(LPVOID lpAddress, size_t dwSize, DWORD 
 
 size_t XDbgController::queryMemory(LPCVOID lpAddress, PMEMORY_BASIC_INFORMATION lpBuffer, size_t dwLength)
 {
-	return NULL;
+	ApiCallPacket outPkt;
+	ApiReturnPakcet inPkt;
+	outPkt.apiId = ID_VirtualQueryEx;
+
+	outPkt.VirtualQueryEx.addr = (LPVOID )lpAddress;
+
+	sendApiCall(outPkt, inPkt);
+	*lpBuffer = inPkt.VirtualQueryEx.memInfo;
+	return inPkt.VirtualQueryEx.result;
 }
 
 bool XDbgController::readMemory(LPCVOID lpBaseAddress, PVOID lpBuffer, size_t nSize, 
@@ -987,7 +1030,9 @@ DWORD_PTR __stdcall Mine_VirtualQueryEx(HANDLE a0,
 	PMEMORY_BASIC_INFORMATION a2,
 	DWORD_PTR a3)
 {
-	return NULL;
+	if (XDbgController::instance().getProcessId() == GetProcessIdFromHandle(a0))
+		return XDbgController::instance().queryMemory(a1, a2, a3);
+	return Real_VirtualQueryEx(a0, a1, a2, a3);
 }
 
 BOOL __stdcall Mine_ReadProcessMemory(HANDLE a0,
