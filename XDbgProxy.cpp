@@ -631,6 +631,7 @@ long XDbgProxy::runApiLoop()
 					MyTrace("%s(): ConnectNamedPipe() failed.", __FUNCTION__);
 					// assert(false);
 					// return -1;
+					Sleep(100);
 					continue;
 				} else {
 					MyTrace("%s(): attached", __FUNCTION__);
