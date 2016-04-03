@@ -404,17 +404,17 @@ HWND getWinFromPid(DWORD pid, DWORD* threadId)
 
 
 //////////////////////////////////////////////////////////////////////////
-#pragma data_seg(".shared")
-HHOOK callWndhookHandle;
-#pragma data_seg()
-#pragma comment(linker,"/SECTION:.shared,RWS")
+//#pragma data_seg(".shared")
+//HHOOK callWndhookHandle = NULL;
+//#pragma data_seg()
+//#pragma comment(linker,"/SECTION:.shared,RWS")
 
 #define HOOK_RESPONSE_MAGIC		(0x12345678)
 LRESULT CALLBACK CallWndRetHookProc(int nCode, WPARAM wParam, LPARAM lParam)
 {
 	// PCWPRETSTRUCT param = (PCWPRETSTRUCT)lParam;
-	LRESULT r = CallNextHookEx(callWndhookHandle, nCode, wParam, lParam);
-	UnhookWindowsHookEx(callWndhookHandle);
+	LRESULT r = CallNextHookEx(NULL, nCode, wParam, lParam);
+	// UnhookWindowsHookEx(callWndhookHandle);
 	return r;
 }
 
@@ -423,8 +423,9 @@ BOOL injectDllByWinHook(DWORD pid, HMODULE hInst)
 	DWORD threadId;
 	HWND hWnd = getWinFromPid(pid, &threadId);
 	if (hWnd && threadId) {
-		callWndhookHandle = SetWindowsHookEx(WH_CALLWNDPROCRET, CallWndRetHookProc, hInst, threadId);
+		HHOOK callWndhookHandle = SetWindowsHookEx(WH_CALLWNDPROCRET, CallWndRetHookProc, hInst, threadId);
 		SendMessage(hWnd, WM_NULL, 0, 0);
+		UnhookWindowsHookEx(callWndhookHandle);
 		return TRUE;
 	} else
 		return FALSE;

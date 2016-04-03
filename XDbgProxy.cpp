@@ -179,9 +179,14 @@ void XDbgProxy::stop()
 	RemoveVectoredExceptionHandler(_vehCookie);
 	_vehCookie = NULL;
 	UninitWin32ApiWrapper();
-	if (_hPipe) {
+	if (_hPipe != INVALID_HANDLE_VALUE) {
 		CloseHandle(_hPipe);
-		_hPipe = NULL;
+		_hPipe = INVALID_HANDLE_VALUE;
+	}
+
+	if (_hApiPipe != INVALID_HANDLE_VALUE) {
+		CloseHandle(_hApiPipe);
+		_hApiPipe = INVALID_HANDLE_VALUE;
 	}
 }
 
@@ -288,7 +293,7 @@ bool XDbgProxy::createPipe()
 }
 
 // SO, THIS MODULE MUST BE A DLL
-BOOL XDbgProxy::DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
+BOOL XDbgProxy::DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved)
 {
 	// MyTrace("%s()", __FUNCTION__);
 
@@ -302,6 +307,12 @@ BOOL XDbgProxy::DllMain(HANDLE hModule, DWORD reason, LPVOID lpReserved)
 
 	switch (reason) {
 	case DLL_PROCESS_ATTACH:
+		{
+			char dllPath[MAX_PATH + 1];
+			GetModuleFileName(hModule, dllPath, sizeof(dllPath) - 1);
+			dllPath[sizeof(dllPath) - 1] = 0;
+			LoadLibrary(dllPath);
+		}
 		// MyTrace("%s(): process(%u) xdbg proxy loaded. thread id: %u", __FUNCTION__, GetCurrentProcessId(), GetCurrentThreadId());
 		break;
 

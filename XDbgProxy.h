@@ -30,7 +30,7 @@ public:
 
 	void waitForAttach();
 
-	BOOL DllMain(HANDLE hModule, DWORD ul_reason_for_call, LPVOID lpReserved);
+	BOOL DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved);
 
 protected:
 	static LONG CALLBACK _VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo);
