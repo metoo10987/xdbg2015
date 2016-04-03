@@ -67,7 +67,13 @@ HANDLE ThreadMgr::addThread(DWORD tid)
 bool ThreadMgr::delThread(DWORD tid)
 {
 	MutexGuard guard(&_lock);
-	_threads.erase(tid);
+	std::map<DWORD, HANDLE>::iterator it = _threads.find(tid);
+	if (it == _threads.end()) {
+		return false;
+	}
+	if (it->second && it->second != (HANDLE)-1)
+		CloseHandle(it->second);
+	_threads.erase(it);
 	return true;
 }
 

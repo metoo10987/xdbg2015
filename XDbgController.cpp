@@ -903,7 +903,7 @@ bool XDbgController::getThreadContext(HANDLE hThread, CONTEXT* ctx)
 
 bool XDbgController::_setThreadContext(HANDLE hThread, const CONTEXT* ctx)
 {
-	if (isRemoteApi()) {
+	if (isRemoteApi() && (api_hook_mask & ID_SetThreadContext)) {
 		DWORD tid = GetThreadIdFromHandle(hThread);
 		if (tid == 0) {
 			assert(false);
@@ -923,7 +923,7 @@ bool XDbgController::_setThreadContext(HANDLE hThread, const CONTEXT* ctx)
 
 bool XDbgController::_getThreadContext(HANDLE hThread, CONTEXT* ctx)
 {
-	if (isRemoteApi()) {
+	if (isRemoteApi() && (api_hook_mask & ID_GetThreadContext)) {
 		DWORD tid = GetThreadIdFromHandle(hThread);
 		if (tid == 0) {
 			assert(false);
