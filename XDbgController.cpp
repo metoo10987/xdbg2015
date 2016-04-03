@@ -618,7 +618,7 @@ BOOL __stdcall Mine_DebugActiveProcess(DWORD a0)
 BOOL __stdcall Mine_DebugActiveProcessStop(DWORD a0)
 {
 	MyTrace("%s()", __FUNCTION__);
-	if (debug_if == 1)
+	if (!XDbgController::instance().isDebugging())
 		return Real_DebugActiveProcessStop(a0);
 
 	XDbgController& dbgctl = XDbgController::instance();
@@ -718,7 +718,7 @@ BOOL __stdcall Mine_WaitForDebugEvent(LPDEBUG_EVENT a0,
 {
 	MyTrace("%s(%p, %u)", __FUNCTION__, a0, a1);
 
-	if (debug_if == 1)
+	if (!XDbgController::instance().isDebugging())
 		return Real_WaitForDebugEvent(a0, a1);
 
 	BOOL result;
@@ -755,7 +755,7 @@ BOOL __stdcall Mine_ContinueDebugEvent(DWORD a0,
 	DWORD a2)
 {
 	MyTrace("%s(%u, %u, %x)", __FUNCTION__, a0, a1, a2);
-	if (debug_if == 1)
+	if (!XDbgController::instance().isDebugging())
 		return Real_ContinueDebugEvent(a0, a1, a2);
 
 	return XDbgController::instance().continueEvent(a0, a1, a2) ? TRUE : FALSE;
@@ -765,7 +765,7 @@ BOOL __stdcall Mine_SetThreadContext(HANDLE a0,
 	CONTEXT* a1)
 {
 	MyTrace("%s(%p, %p)", __FUNCTION__, a0, a1);
-	if (debug_if == 1)
+	if (!XDbgController::instance().isDebugging())
 		return Real_SetThreadContext(a0, a1);
 
 	XDbgController& dbgctl = XDbgController::instance();

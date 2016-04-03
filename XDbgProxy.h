@@ -40,7 +40,9 @@ protected:
 		union _LDR_DLL_NOTIFICATION_DATA* NotificationData, PVOID Context);
 
 	LONG CALLBACK VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo);
-	bool createPipe();
+	bool createEventPipe();
+	bool createApiPipe();
+	// bool createPipe();
 
 	virtual long run();
 	virtual long runApiLoop();

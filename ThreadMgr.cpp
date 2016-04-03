@@ -1,6 +1,7 @@
 #include <Windows.h>
 #include "ThreadMgr.h"
 #include <tlhelp32.h>
+#include "common.h"
 
 ThreadMgr::ThreadMgr()
 {
@@ -52,6 +53,12 @@ void ThreadMgr::clearThreads()
 HANDLE ThreadMgr::addThread(DWORD tid)
 {
 	HANDLE hThread = openThread(THREAD_ALL_ACCESS, FALSE, tid);
+	if (hThread == NULL) {
+		MyTrace("%s(): openThread() failed. errno: %x", __FUNCTION__, GetLastError());
+		// assert(false);
+		hThread = (HANDLE)-1;
+	}
+
 	MutexGuard guard(&_lock);
 	_threads[tid] = hThread;
 	return hThread;

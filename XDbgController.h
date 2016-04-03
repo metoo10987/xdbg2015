@@ -86,6 +86,16 @@ public:
 
 	static BOOL injectDll(DWORD pid, HMODULE hInst);
 
+	bool isDebugging() const
+	{
+		return _hPipe != INVALID_HANDLE_VALUE;
+	}
+
+	bool isRemoteApi() const
+	{
+		return _hApiPipe != INVALID_HANDLE_VALUE;
+	}
+
 protected:
 	void resetDbgEvent()
 	{

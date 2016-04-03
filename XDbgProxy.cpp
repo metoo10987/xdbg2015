@@ -127,8 +127,8 @@ bool XDbgProxy::initialize()
 		return false;
 	}
 
-	if (!createPipe())
-		return false;
+	/* if (!createPipe())
+		return false; */
 
 	_vehCookie = AddVectoredExceptionHandler(1, &XDbgProxy::_VectoredHandler);
 	if (_vehCookie == NULL)
@@ -192,16 +192,15 @@ void XDbgProxy::stop()
 
 LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 {
-
 	if (!_attached)
 		return EXCEPTION_CONTINUE_SEARCH;
-
-	if (XDbgGetCurrentThreadId() == getId() || XDbgGetCurrentThreadId() == _apiThread.getId())
+	DWORD currentTid = XDbgGetCurrentThreadId();
+	if (currentTid == getId() || currentTid == _apiThread.getId())
 		return EXCEPTION_CONTINUE_SEARCH;
 
 	MutexGuard guard(this);
 
-	if (threadIdToHandle(XDbgGetCurrentThreadId()) == NULL) {
+	if (threadIdToHandle(currentTid) == NULL) {
 		// assert(false);
 		return EXCEPTION_CONTINUE_SEARCH;
 	}
@@ -266,7 +265,7 @@ LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 	return EXCEPTION_CONTINUE_SEARCH;
 }
 
-bool XDbgProxy::createPipe()
+/* bool XDbgProxy::createPipe()
 {
 	std::string name = makePipeName(XDbgGetCurrentProcessId());	
 	_hPipe = ::CreateNamedPipe(name.c_str(), PIPE_ACCESS_DUPLEX, PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT, 
@@ -288,6 +287,33 @@ bool XDbgProxy::createPipe()
 	MyTrace("%s(): _hPipe = %x[%d, %d], _hApiPipe = %x[%d, %d]", __FUNCTION__, 
 		_hPipe, EVENT_MESSAGE_SIZE, CONTINUE_MESSAGE_SIZE, 
 		_hApiPipe, RETURN_MESSAGE_SIZE, CALL_MESSAGE_SIZE);
+
+	return true;
+} */
+
+bool XDbgProxy::createEventPipe()
+{
+	std::string name = makePipeName(XDbgGetCurrentProcessId());
+	_hPipe = ::CreateNamedPipe(name.c_str(), PIPE_ACCESS_DUPLEX, PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+		PIPE_UNLIMITED_INSTANCES, EVENT_MESSAGE_SIZE, CONTINUE_MESSAGE_SIZE, NMPWAIT_USE_DEFAULT_WAIT, NULL);
+
+	if (_hPipe == INVALID_HANDLE_VALUE)
+		return false;
+
+	return true;
+}
+
+bool XDbgProxy::createApiPipe()
+{
+	std::string apiName = makeApiPipeName(XDbgGetCurrentProcessId());
+	_hApiPipe = ::CreateNamedPipe(apiName.c_str(), PIPE_ACCESS_DUPLEX, PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+		PIPE_UNLIMITED_INSTANCES, RETURN_MESSAGE_SIZE, CALL_MESSAGE_SIZE, NMPWAIT_USE_DEFAULT_WAIT, NULL);
+
+	if (_hApiPipe == INVALID_HANDLE_VALUE) {
+		CloseHandle(_hPipe);
+		_hPipe = INVALID_HANDLE_VALUE;
+		return false;
+	}
 
 	return true;
 }
@@ -410,25 +436,32 @@ long XDbgProxy::run()
 
 		} else {
 
+			if (!createEventPipe()) {
+				continue;
+			}
+
 			if (!ConnectNamedPipe(_hPipe, NULL)) {
 				if (GetLastError() == ERROR_PIPE_CONNECTED) {
 					onDbgConnect();
 					_attached = true;
 					MyTrace("debugger attached");
+					continue;
+
 				} else {
 					MyTrace("%s(): ConnectNamedPipe(%p) failed. errCode: %d ", __FUNCTION__, _hPipe, GetLastError());
-					assert(false);
-					return -1;
-				}
-
-				Sleep(100);
+					// assert(false);
+					// return -1;
+					CloseHandle(_hPipe);
+					_hPipe = INVALID_HANDLE_VALUE;
+					Sleep(100);
+				}				
 
 			} else {
 				onDbgConnect();
 				_attached = true;
 				MyTrace("debugger attached");
 			}
-		}		
+		}
 	}
 
 	return 0;
@@ -636,17 +669,29 @@ long XDbgProxy::runApiLoop()
 	bool attached = false;
 
 	while (!_stopFlag) {
+
 		if (!attached) {
-			if (!ConnectNamedPipe(_hApiPipe, NULL)) {				
-				if (GetLastError() != ERROR_PIPE_CONNECTED) {
+			if (!createApiPipe()) {
+				Sleep(100);
+				continue;
+			}
+
+			if (!ConnectNamedPipe(_hApiPipe, NULL)) {
+
+				if (GetLastError() == ERROR_PIPE_CONNECTED) {
+
+					MyTrace("%s(): attached", __FUNCTION__);
+					attached = true;
+					
+				} else {
+
 					MyTrace("%s(): ConnectNamedPipe() failed.", __FUNCTION__);
 					// assert(false);
 					// return -1;
+					CloseHandle(_hApiPipe);
+					_hApiPipe = INVALID_HANDLE_VALUE;
 					Sleep(100);
 					continue;
-				} else {
-					MyTrace("%s(): attached", __FUNCTION__);
-					attached = true;
 				}
 
 			} else {
