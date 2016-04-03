@@ -485,6 +485,10 @@ void XDbgProxy::onDbgConnect()
 	sendProcessInfo(ack.dwThreadId);
 	sendThreadInfo();
 	sendModuleInfo(ack.dwThreadId);
+	// attach breakpoint
+	DWORD tid;
+	HANDLE hThread = ::CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE )DebugBreak, NULL, 0, &tid);
+	CloseHandle(hThread);
 	resumeAll(XDbgGetCurrentThreadId());
 }
 
