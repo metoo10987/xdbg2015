@@ -644,6 +644,8 @@ void XDbgProxy::registerRemoteApi()
 	_apiHandlers[ID_SuspendThread] = &XDbgProxy::SuspendThread;
 	_apiHandlers[ID_ResumeThread] = &XDbgProxy::ResumeThread;
 	_apiHandlers[ID_VirtualQueryEx] = &XDbgProxy::VirtualQueryEx;
+	_apiHandlers[ID_GetThreadContext] = &XDbgProxy::GetThreadContext;
+	_apiHandlers[ID_SetThreadContext] = &XDbgProxy::SetThreadContext;
 }
 
 BOOL XDbgProxy::recvApiCall(ApiCallPacket& inPkt)
@@ -836,6 +838,8 @@ void XDbgProxy::WriteProcessMemory(ApiCallPacket& inPkt)
 
 void XDbgProxy::SuspendThread(ApiCallPacket& inPkt)
 {
+	MyTrace("%s()", __FUNCTION__);
+
 	ApiReturnPakcet outPkt;
 	HANDLE hThread;
 	
@@ -850,6 +854,8 @@ void XDbgProxy::SuspendThread(ApiCallPacket& inPkt)
 
 void XDbgProxy::ResumeThread(ApiCallPacket& inPkt)
 {
+	MyTrace("%s()", __FUNCTION__);
+
 	ApiReturnPakcet outPkt;
 	HANDLE hThread;
 
@@ -864,8 +870,48 @@ void XDbgProxy::ResumeThread(ApiCallPacket& inPkt)
 
 void XDbgProxy::VirtualQueryEx(ApiCallPacket& inPkt)
 {
+	MyTrace("%s()", __FUNCTION__);
+
 	ApiReturnPakcet outPkt;
 	outPkt.VirtualQueryEx.result = ::VirtualQuery(inPkt.VirtualQueryEx.addr, &outPkt.VirtualQueryEx.memInfo,
 		sizeof(outPkt.VirtualQueryEx.memInfo));
+	sendApiReturn(outPkt);
+}
+
+void XDbgProxy::GetThreadContext(ApiCallPacket& inPkt)
+{
+	MyTrace("%s()", __FUNCTION__);
+
+	ApiReturnPakcet outPkt;
+	HANDLE hThread;
+	hThread = threadIdToHandle(inPkt.GetThreadContext.threadId);
+	if (hThread == NULL || hThread == (HANDLE )-1) {
+		outPkt.GetThreadContext.result = FALSE;
+		MyTrace("%s(): cannot found the threadId: %d", __FUNCTION__, inPkt.GetThreadContext.threadId);
+	} else {
+		outPkt.GetThreadContext.ctx.ContextFlags = inPkt.GetThreadContext.contextFlags;
+		outPkt.GetThreadContext.result = ::GetThreadContext(hThread, &outPkt.GetThreadContext.ctx);
+	}
+
+	MyTrace("%s(): th: %x, tid: %d, result: %d, errno: %d", __FUNCTION__, hThread,
+		inPkt.GetThreadContext.threadId, outPkt.GetThreadContext.result, GetLastError());
+	sendApiReturn(outPkt);
+}
+
+void XDbgProxy::SetThreadContext(ApiCallPacket& inPkt)
+{
+	MyTrace("%s()", __FUNCTION__);
+
+	ApiReturnPakcet outPkt;
+	HANDLE hThread;
+	hThread = threadIdToHandle(inPkt.SetThreadContext.threadId);
+	if (hThread == NULL || hThread == (HANDLE)-1) {
+		outPkt.SetThreadContext.result = FALSE;
+		MyTrace("%s(): cannot found the threadId: %d", __FUNCTION__, inPkt.GetThreadContext.threadId);
+	} else
+		outPkt.SetThreadContext.result = ::SetThreadContext(hThread, &inPkt.SetThreadContext.ctx);
+
+	MyTrace("%s(): th: %x, tid: %d, result: %d, errno: %d", __FUNCTION__, hThread, 
+		inPkt.GetThreadContext.threadId, outPkt.GetThreadContext.result, GetLastError());
 	sendApiReturn(outPkt);
 }

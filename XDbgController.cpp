@@ -870,7 +870,7 @@ bool XDbgController::setThreadContext(HANDLE hThread, const CONTEXT* ctx)
 			*(PDWORD)&ctx->EFlags &= ~SINGLE_STEP_FLAG;
 	}
 
-	return Real_SetThreadContext(hThread, ctx) == TRUE;
+	return _setThreadContext(hThread, ctx) == TRUE;
 }
 
 bool XDbgController::getThreadContext(HANDLE hThread, CONTEXT* ctx)
@@ -898,7 +898,50 @@ bool XDbgController::getThreadContext(HANDLE hThread, CONTEXT* ctx)
 
 	}
 
-	return Real_GetThreadContext(hThread, ctx) == TRUE;
+	return _getThreadContext(hThread, ctx);
+}
+
+bool XDbgController::_setThreadContext(HANDLE hThread, const CONTEXT* ctx)
+{
+	if (isRemoteApi()) {
+		DWORD tid = GetThreadIdFromHandle(hThread);
+		if (tid == 0) {
+			assert(false);
+			return false;
+		}
+
+		ApiCallPacket outPkt;
+		ApiReturnPakcet inPkt;
+		outPkt.apiId = ID_SetThreadContext;
+		outPkt.SetThreadContext.threadId = tid;
+		outPkt.SetThreadContext.ctx = *ctx;
+		sendApiCall(outPkt, inPkt);
+		return inPkt.SetThreadContext.result == TRUE;
+	} else
+		return ::Real_SetThreadContext(hThread, ctx) == TRUE;
+}
+
+bool XDbgController::_getThreadContext(HANDLE hThread, CONTEXT* ctx)
+{
+	if (isRemoteApi()) {
+		DWORD tid = GetThreadIdFromHandle(hThread);
+		if (tid == 0) {
+			assert(false);
+			return false;
+		}
+
+		ApiCallPacket outPkt;
+		ApiReturnPakcet inPkt;
+		outPkt.apiId = ID_GetThreadContext;
+		outPkt.GetThreadContext.threadId = tid;
+		outPkt.GetThreadContext.contextFlags = ctx->ContextFlags;
+		sendApiCall(outPkt, inPkt);
+		if (!inPkt.GetThreadContext.result)
+			return false;
+		*ctx = inPkt.GetThreadContext.ctx;
+		return true;
+	} else
+		return ::Real_GetThreadContext(hThread, ctx) == TRUE;
 }
 
 void registerAutoDebugHandler(AutoDebug* handler)

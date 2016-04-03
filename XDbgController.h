@@ -112,6 +112,9 @@ protected:
 	BOOL sendApiCall(const ApiCallPacket& outPkt, ApiReturnPakcet& inPkt);
 	BOOL recvApiReturn(ApiReturnPakcet& inPkt);
 
+	bool _setThreadContext(HANDLE hThread, const CONTEXT* ctx);
+	bool _getThreadContext(HANDLE hThread, CONTEXT* ctx);
+
 private:
 	XDbgController(void);
 	~XDbgController(void);

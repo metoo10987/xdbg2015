@@ -90,7 +90,10 @@ protected:
 	void SuspendThread(ApiCallPacket& inPkt);
 	void ResumeThread(ApiCallPacket& inPkt);
 	void VirtualQueryEx(ApiCallPacket& inPkt);
-	//////////////////////////////////////////////////////////////////////////
+	void GetThreadContext(ApiCallPacket& inPkt);
+	void SetThreadContext(ApiCallPacket& inPkt);
+	//////////////////////////////////////////////////
+	////////////////////////
 
 protected:
 	HANDLE					_hPipe;

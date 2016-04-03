@@ -66,6 +66,8 @@ void _MyTrace(LPCSTR fmt, ...);
 #define ID_SuspendThread				(0x00000004)
 #define ID_ResumeThread					(0x00000008)
 #define ID_VirtualQueryEx				(0x00000010)
+#define ID_GetThreadContext				(0x00000020)
+#define ID_SetThreadContext				(0x00000040)
 
 #define CALL_MESSAGE_SIZE		sizeof(ApiCallPacket)
 #define RETURN_MESSAGE_SIZE		sizeof(ApiReturnPakcet)
@@ -97,6 +99,16 @@ struct ApiCallPacket {
 		struct {
 			PVOID		addr;
 		} VirtualQueryEx;
+
+		struct {
+			DWORD	threadId;
+			DWORD	contextFlags;
+		} GetThreadContext;
+
+		struct {
+			DWORD	threadId;
+			CONTEXT	ctx;
+		} SetThreadContext;
 	};
 };
 
@@ -127,6 +139,15 @@ struct ApiReturnPakcet {
 			SIZE_T						result;
 			MEMORY_BASIC_INFORMATION	memInfo;
 		} VirtualQueryEx;
+
+		struct {
+			BOOL		result;
+			CONTEXT		ctx;
+		} GetThreadContext;
+
+		struct {
+			BOOL		result;
+		} SetThreadContext;
 	};	
 };
 
