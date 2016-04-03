@@ -231,7 +231,9 @@ HWND __stdcall Mine_CreateWindowExW(DWORD a0,
 	LPVOID a11)
 {
 	// MyTrace("%s() classname: %S", __FUNCTION__, lpClassName);
-	if (lstrcmpW(lpClassName, LISTVIEW_CLASS) == 0) {
+	if (LOWORD(lpClassName) != ULONG_PTR(lpClassName) && 
+		lstrcmpW(lpClassName, LISTVIEW_CLASS) == 0) {
+
 		lpClassName = MY_LISTVIEW_CLASS;
 		// MyTrace("%s() new classname: %S", __FUNCTION__, lpClassName);
 	}
