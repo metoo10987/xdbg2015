@@ -60,10 +60,12 @@ bool XDbgController::connectInferior(DWORD pid)
 		}
 	}
 
-	if (!connectRemoteApi(pid)) {
-		CloseHandle(_hPipe);
-		_hPipe = INVALID_HANDLE_VALUE;
-		return false;
+	if (_hApiPipe == INVALID_HANDLE_VALUE) {
+		if (!connectRemoteApi(pid)) {
+			CloseHandle(_hPipe);
+			_hPipe = INVALID_HANDLE_VALUE;
+			return false;
+		}
 	}
 
 	MyTrace("%s(): _hPipe = %x, _hApiPipe = %x", __FUNCTION__, _hPipe, _hApiPipe);
@@ -193,6 +195,8 @@ bool XDbgController::attach(DWORD pid, DWORD tid)
 	return true;
 }
 
+extern UINT exec_mode;
+
 bool XDbgController::stop(DWORD pid)
 {
 	assert(_pid == pid);
@@ -209,9 +213,16 @@ bool XDbgController::stop(DWORD pid)
 		_hProcess = NULL;
 	}
 
-	if (_hPipe) {
+	if (_hPipe != INVALID_HANDLE_VALUE) {
 		CloseHandle(_hPipe);
-		_hPipe = NULL;
+		_hPipe = INVALID_HANDLE_VALUE;
+	}
+
+	if (exec_mode == 1) {
+		if (_hApiPipe != INVALID_HANDLE_VALUE) {
+			CloseHandle(_hApiPipe);
+			_hApiPipe = INVALID_HANDLE_VALUE;
+		}
 	}
 
 	resetDbgEvent();
