@@ -48,16 +48,19 @@ bool XDbgController::connectInferior(DWORD pid)
 		0 /*FILE_FLAG_OVERLAPPED*/, NULL);
 
 	if (_hPipe == INVALID_HANDLE_VALUE) {
-		MyTrace("%s() cannot connect to '%s'(event pipe)", __FUNCTION__, name.c_str());
-		return false;
+		if (GetLastError() == ERROR_PIPE_BUSY) {
+			if (!WaitNamedPipe(name.c_str(), NMPWAIT_USE_DEFAULT_WAIT)) {
+				MyTrace("%s() cannot wait to to '%s'(event pipe)", __FUNCTION__, name.c_str());
+				return false;
+			}
+
+		} else {
+			MyTrace("%s() cannot connect to '%s'(event pipe)", __FUNCTION__, name.c_str());
+			return false;
+		}
 	}
 
-	std::string apiName = makeApiPipeName(pid);
-	_hApiPipe = CreateFile(apiName.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
-		0 /*FILE_FLAG_OVERLAPPED*/, NULL);
-
-	if (_hApiPipe == INVALID_HANDLE_VALUE) {
-		MyTrace("%s() cannot connect to '%s'(api pipe)", __FUNCTION__, apiName.c_str());
+	if (!connectRemoteApi(pid)) {
 		CloseHandle(_hPipe);
 		_hPipe = INVALID_HANDLE_VALUE;
 		return false;
@@ -74,8 +77,16 @@ bool XDbgController::connectRemoteApi(DWORD pid)
 		0 /*FILE_FLAG_OVERLAPPED*/, NULL);
 
 	if (_hApiPipe == INVALID_HANDLE_VALUE) {
-		MyTrace("%s() cannot connect to '%s'(api pipe)", __FUNCTION__, apiName.c_str());
-		return false;
+		if (GetLastError() == ERROR_PIPE_BUSY) {
+			if (!WaitNamedPipe(apiName.c_str(), NMPWAIT_USE_DEFAULT_WAIT)) {
+				MyTrace("%s() cannot wait to to '%s'(api pipe)", __FUNCTION__, apiName.c_str());
+				return false;
+			}
+
+		} else {
+			MyTrace("%s() cannot connect to '%s'(api pipe)", __FUNCTION__, apiName.c_str());
+			return false;
+		}
 	}
 
 	MyTrace("%s(): hApiPipe = %x", __FUNCTION__, _hApiPipe);
@@ -87,7 +98,7 @@ void XDbgController::disconnectRemoteApi()
 {
 	if (_hApiPipe != INVALID_HANDLE_VALUE) {
 		CloseHandle(_hApiPipe);
-		_hApiPipe = NULL;
+		_hApiPipe = INVALID_HANDLE_VALUE;
 	}
 
 	_pid = 0;
@@ -97,13 +108,10 @@ void XDbgController::disconnectInferior()
 {
 	if (_hPipe != INVALID_HANDLE_VALUE) {
 		CloseHandle(_hPipe);
-		_hPipe = NULL;
+		_hPipe = INVALID_HANDLE_VALUE;
 	}
 
-	if (_hApiPipe != INVALID_HANDLE_VALUE) {
-		CloseHandle(_hApiPipe);
-		_hApiPipe = NULL;
-	}
+	disconnectRemoteApi();
 }
 
 BOOL XDbgController::sendApiCall(const ApiCallPacket& outPkt)
