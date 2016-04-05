@@ -854,7 +854,7 @@ bool XDbgController::setThreadContext(HANDLE hThread, const CONTEXT* ctx)
 		DWORD threadId = GetThreadIdFromHandle(hThread);
 		if (threadId == 0) {
 			assert(false);
-			return Real_SetThreadContext(hThread, ctx) == TRUE;
+			return _setThreadContext(hThread, ctx);
 		}
 
 		if (threadId == currentThreadId && getEventCode() == EXCEPTION_DEBUG_EVENT) {
@@ -870,7 +870,7 @@ bool XDbgController::setThreadContext(HANDLE hThread, const CONTEXT* ctx)
 			*(PDWORD)&ctx->EFlags &= ~SINGLE_STEP_FLAG;
 	}
 
-	return _setThreadContext(hThread, ctx) == TRUE;
+	return _setThreadContext(hThread, ctx);
 }
 
 bool XDbgController::getThreadContext(HANDLE hThread, CONTEXT* ctx)
@@ -881,7 +881,7 @@ bool XDbgController::getThreadContext(HANDLE hThread, CONTEXT* ctx)
 		DWORD threadId = GetThreadIdFromHandle(hThread);
 		if (threadId == 0) {
 			assert(false);
-			return Real_GetThreadContext(hThread, ctx) == TRUE;
+			return _getThreadContext(hThread, ctx);
 		}
 
 		if (threadId == currentThreadId && getEventCode() == EXCEPTION_DEBUG_EVENT) {
@@ -975,7 +975,8 @@ size_t XDbgController::queryMemory(LPCVOID lpAddress, PMEMORY_BASIC_INFORMATION 
 	outPkt.VirtualQueryEx.addr = (LPVOID )lpAddress;
 
 	sendApiCall(outPkt, inPkt);
-	*lpBuffer = inPkt.VirtualQueryEx.memInfo;
+	if (inPkt.VirtualQueryEx.result)
+		*lpBuffer = inPkt.VirtualQueryEx.memInfo;
 	return inPkt.VirtualQueryEx.result;
 }
 
