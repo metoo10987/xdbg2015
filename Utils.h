@@ -1,5 +1,12 @@
 #pragma once
 
+#ifdef _DEBUG
+void _MyTrace(LPCSTR fmt, ...);
+#define MyTrace		_MyTrace
+#else
+#define MyTrace
+#endif
+
 #define MakePtr(a, b)    ( ((ULONG_PTR)a ) + ((ULONG_PTR)b ) )
 
 template<typename T>

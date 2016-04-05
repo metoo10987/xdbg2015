@@ -105,6 +105,7 @@ protected:
 
 	bool hookDbgApi();
 
+	HANDLE connectPipe(const std::string& name);
 	bool connectInferior(DWORD pid);
 	void disconnectInferior();
 

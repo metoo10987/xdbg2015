@@ -1,6 +1,6 @@
 #include <Windows.h>
 #include "Thread.h"
-#include "common.h"
+#include "Utils.h"
 
 Thread::Thread(void)
 {

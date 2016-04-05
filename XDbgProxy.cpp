@@ -349,10 +349,16 @@ BOOL XDbgProxy::DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved)
 	case DLL_THREAD_ATTACH:
 
 		MyTrace("%s(): process(%u) xdbg proxy attach thread. thread id: %u <<<", __FUNCTION__,
-			GetCurrentProcessId(), GetCurrentThreadId());
+			XDbgGetCurrentProcessId(), XDbgGetCurrentThreadId());
 
 		if (!_attached)
 			return TRUE;
+
+		if (threadIdToHandle(XDbgGetCurrentThreadId()) != NULL) {
+			// reentry
+			return TRUE;
+		}
+
 		// REPORT CreateThread
 		msg.dwProcessId = XDbgGetCurrentProcessId();
 		msg.dwThreadId = XDbgGetCurrentThreadId();
@@ -381,6 +387,12 @@ BOOL XDbgProxy::DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved)
 
 		if (!_attached)
 			return TRUE;
+
+		if (threadIdToHandle(GetCurrentThreadId()) == NULL) {
+			// reentry
+			return TRUE;
+		}
+
 		msg.dwProcessId = XDbgGetCurrentProcessId();
 		msg.dwThreadId = XDbgGetCurrentThreadId();
 		msg.dwDebugEventCode = EXIT_THREAD_DEBUG_EVENT;
@@ -644,6 +656,7 @@ void XDbgProxy::registerRemoteApi()
 	_apiHandlers[ID_SuspendThread] = &XDbgProxy::SuspendThread;
 	_apiHandlers[ID_ResumeThread] = &XDbgProxy::ResumeThread;
 	_apiHandlers[ID_VirtualQueryEx] = &XDbgProxy::VirtualQueryEx;
+	_apiHandlers[ID_VirtualProtectEx] = &XDbgProxy::VirtualProtectEx;
 	_apiHandlers[ID_GetThreadContext] = &XDbgProxy::GetThreadContext;
 	_apiHandlers[ID_SetThreadContext] = &XDbgProxy::SetThreadContext;
 }
@@ -853,6 +866,16 @@ void XDbgProxy::SuspendThread(ApiCallPacket& inPkt)
 
 	ApiReturnPakcet outPkt;
 	HANDLE hThread;
+
+#ifdef _DEBUG
+	if (inPkt.SuspendThread.threadId == getId() || inPkt.SuspendThread.threadId == _apiThread.getId()) {
+		// log error
+		assert(false);
+		outPkt.SuspendThread.result = -1;
+		SetLastError(ERROR_INVALID_PARAMETER);
+		sendApiReturn(outPkt);
+	}
+#endif
 	
 	hThread = threadIdToHandle(inPkt.SuspendThread.threadId);
 
@@ -945,6 +968,17 @@ void XDbgProxy::SetThreadContext(ApiCallPacket& inPkt)
 
 	ApiReturnPakcet outPkt;
 	HANDLE hThread;
+
+#ifdef _DEBUG
+	if (inPkt.SuspendThread.threadId == getId() || inPkt.SuspendThread.threadId == _apiThread.getId()) {
+		// log error
+		assert(false);
+		outPkt.SuspendThread.result = -1;
+		SetLastError(ERROR_INVALID_PARAMETER);
+		sendApiReturn(outPkt);
+	}
+#endif
+
 	hThread = threadIdToHandle(inPkt.SetThreadContext.threadId);
 	if (hThread == NULL || hThread == (HANDLE)-1) {
 		outPkt.SetThreadContext.result = FALSE;
@@ -957,6 +991,22 @@ void XDbgProxy::SetThreadContext(ApiCallPacket& inPkt)
 #ifdef _API_TRACE
 	MyTrace("%s(): th: %x, tid: %d, result: %d, errno: %d", __FUNCTION__, hThread, 
 		inPkt.SetThreadContext.threadId, outPkt.SetThreadContext.result, outPkt.lastError);
+#endif
+
+	sendApiReturn(outPkt);
+}
+
+void XDbgProxy::VirtualProtectEx(ApiCallPacket& inPkt)
+{
+	ApiReturnPakcet outPkt;
+	outPkt.VirtualProtectEx.result = ::VirtualProtect(inPkt.VirtualProtectEx.addr,
+		inPkt.VirtualProtectEx.size, inPkt.VirtualProtectEx.prot,
+		&outPkt.VirtualProtectEx.oldProt);
+	outPkt.lastError = GetLastError();
+
+#ifdef _API_TRACE
+	MyTrace("%s(): addr: %p, result: %d, errno: %d", __FUNCTION__, inPkt.VirtualProtectEx.addr,
+		outPkt.VirtualProtectEx.result, outPkt.lastError);
 #endif
 
 	sendApiReturn(outPkt);

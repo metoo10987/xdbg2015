@@ -43,14 +43,6 @@ struct DebugAckPacket {
 	};
 };
 
-void _MyTrace(LPCSTR fmt, ...);
-
-#ifdef _DEBUG
-#define MyTrace		_MyTrace
-#else
-#define MyTrace
-#endif
-
 #define SINGLE_STEP_FLAG				0x100
 #define DBG_PRINTEXCEPTION_WIDE_C		(0x4001000AL)
 
@@ -68,6 +60,11 @@ void _MyTrace(LPCSTR fmt, ...);
 #define ID_VirtualQueryEx				(0x00000010)
 #define ID_GetThreadContext				(0x00000020)
 #define ID_SetThreadContext				(0x00000040)
+#define ID_VirtualProtectEx				(0x00000080)
+#define ID_VirtualAllocEx				(0x00000100)
+#define ID_VirtualFreeEx				(0x00000200)
+#define ID_GetModuleFileNameExW			(0x00000400)
+#define ID_NtQueryInformationProcess	(0x00000800)
 
 #define CALL_MESSAGE_SIZE		sizeof(ApiCallPacket)
 #define RETURN_MESSAGE_SIZE		sizeof(ApiReturnPakcet)
@@ -101,14 +98,33 @@ struct ApiCallPacket {
 		} VirtualQueryEx;
 
 		struct {
-			DWORD	threadId;
-			DWORD	contextFlags;
+			DWORD		threadId;
+			DWORD		contextFlags;
 		} GetThreadContext;
 
 		struct {
-			DWORD	threadId;
-			CONTEXT	ctx;
+			DWORD		threadId;
+			CONTEXT		ctx;
 		} SetThreadContext;
+
+		struct {
+			PVOID		addr;
+			SIZE_T		size;
+			DWORD		prot;
+		} VirtualProtectEx;
+
+		struct {
+			PVOID		addr;
+			SIZE_T		size;
+			DWORD		type;
+			DWORD		prot;
+		} VirtualAllocEx;
+
+		struct {
+			PVOID		addr;
+			SIZE_T		size;
+			DWORD		type;
+		} VirtualFreeEx;
 	};
 };
 
@@ -148,7 +164,20 @@ struct ApiReturnPakcet {
 		struct {
 			BOOL		result;
 		} SetThreadContext;
-	};	
+
+		struct {
+			BOOL		result;
+			DWORD		oldProt;
+		} VirtualProtectEx;
+
+		struct {
+			PVOID		result;
+		} VirtualAllocEx;
+
+		struct {
+			BOOL		result;
+		} VirtualFreeEx;
+	};
 };
 
 //////////////////////////////////////////////////////////////////////////

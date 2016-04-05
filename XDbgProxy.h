@@ -92,8 +92,9 @@ protected:
 	void VirtualQueryEx(ApiCallPacket& inPkt);
 	void GetThreadContext(ApiCallPacket& inPkt);
 	void SetThreadContext(ApiCallPacket& inPkt);
-	//////////////////////////////////////////////////
-	////////////////////////
+	void VirtualProtectEx(ApiCallPacket& inPkt);
+
+	//////////////////////////////////////////////////////////////////////////
 
 protected:
 	HANDLE					_hPipe;

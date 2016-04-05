@@ -40,32 +40,46 @@ bool XDbgController::initialize(HMODULE hInst, bool hookApi)
 	return true;
 }
 
+HANDLE XDbgController::connectPipe(const std::string& name)
+{
+	HANDLE hPipe = INVALID_HANDLE_VALUE;
+	for (int i = 0; i < 10; i ++) {
+		hPipe = CreateFile(name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
+			0 /*FILE_FLAG_OVERLAPPED*/, NULL);
+
+		if (hPipe == INVALID_HANDLE_VALUE) {
+
+			if (GetLastError() != ERROR_PIPE_BUSY) {
+				// log error
+				Sleep(100);
+				continue;
+			}
+
+			if (!WaitNamedPipe(name.c_str(), NMPWAIT_USE_DEFAULT_WAIT)) {
+				MyTrace("%s() cannot wait to to '%s'(event pipe)", __FUNCTION__, name.c_str());
+				return INVALID_HANDLE_VALUE;
+			}
+
+		} else
+			break;
+	}
+
+	return hPipe;
+}
+
 bool XDbgController::connectInferior(DWORD pid)
 {
 	std::string name = makePipeName(pid);
-	// WaitNamedPipe(name.c_str(), NMPWAIT_WAIT_FOREVER);
-	_hPipe = CreateFile(name.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
-		0 /*FILE_FLAG_OVERLAPPED*/, NULL);
-
+	_hPipe = connectPipe(name);
 	if (_hPipe == INVALID_HANDLE_VALUE) {
-		if (GetLastError() == ERROR_PIPE_BUSY) {
-			if (!WaitNamedPipe(name.c_str(), NMPWAIT_USE_DEFAULT_WAIT)) {
-				MyTrace("%s() cannot wait to to '%s'(event pipe)", __FUNCTION__, name.c_str());
-				return false;
-			}
-
-		} else {
-			MyTrace("%s() cannot connect to '%s'(event pipe)", __FUNCTION__, name.c_str());
-			return false;
-		}
+		assert(false);
+		return false;
 	}
 
-	if (_hApiPipe == INVALID_HANDLE_VALUE) {
-		if (!connectRemoteApi(pid)) {
-			CloseHandle(_hPipe);
-			_hPipe = INVALID_HANDLE_VALUE;
-			return false;
-		}
+	if (!connectRemoteApi(pid)) {
+		disconnectInferior();
+		assert(false);
+		return false;
 	}
 
 	MyTrace("%s(): _hPipe = %x, _hApiPipe = %x", __FUNCTION__, _hPipe, _hApiPipe);
@@ -75,22 +89,7 @@ bool XDbgController::connectInferior(DWORD pid)
 bool XDbgController::connectRemoteApi(DWORD pid)
 {
 	std::string apiName = makeApiPipeName(pid);
-	_hApiPipe = CreateFile(apiName.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
-		0 /*FILE_FLAG_OVERLAPPED*/, NULL);
-
-	if (_hApiPipe == INVALID_HANDLE_VALUE) {
-		if (GetLastError() == ERROR_PIPE_BUSY) {
-			if (!WaitNamedPipe(apiName.c_str(), NMPWAIT_USE_DEFAULT_WAIT)) {
-				MyTrace("%s() cannot wait to to '%s'(api pipe)", __FUNCTION__, apiName.c_str());
-				return false;
-			}
-
-		} else {
-			MyTrace("%s() cannot connect to '%s'(api pipe)", __FUNCTION__, apiName.c_str());
-			return false;
-		}
-	}
-
+	_hApiPipe = connectPipe(apiName);
 	MyTrace("%s(): hApiPipe = %x", __FUNCTION__, _hApiPipe);
 	_pid = pid;
 	return true;
@@ -724,6 +723,12 @@ DWORD_PTR __stdcall Mine_VirtualQueryEx(HANDLE a0,
 	PMEMORY_BASIC_INFORMATION a2,
 	DWORD_PTR a3);
 
+BOOL __stdcall Mine_VirtualProtectEx(HANDLE a0,
+	LPVOID a1,
+	SIZE_T a2,
+	DWORD a3,
+	PDWORD a4);
+
 BOOL __stdcall Mine_WaitForDebugEvent(LPDEBUG_EVENT a0,
 	DWORD a1)
 {
@@ -820,8 +825,7 @@ bool XDbgController::hookDbgApi()
 	DetourAttach(&(PVOID&)Real_WaitForDebugEvent, &(PVOID&)Mine_WaitForDebugEvent);
 	DetourAttach(&(PVOID&)Real_ContinueDebugEvent, &(PVOID&)Mine_ContinueDebugEvent);
 	DetourAttach(&(PVOID&)Real_GetThreadContext, &(PVOID&)Mine_GetThreadContext);
-	DetourAttach(&(PVOID&)Real_SetThreadContext, &(PVOID&)Mine_SetThreadContext);
-
+	DetourAttach(&(PVOID&)Real_SetThreadContext, &(PVOID&)Mine_SetThreadContext);	
 	//////////////////////////////////////////////////////////////////////////
 	// optional hooking api
 	if (api_hook_mask & ID_ReadProcessMemory) {
@@ -842,6 +846,10 @@ bool XDbgController::hookDbgApi()
 
 	if (api_hook_mask & ID_VirtualQueryEx) {
 		DetourAttach(&(PVOID&)Real_VirtualQueryEx, &(PVOID&)Mine_VirtualQueryEx);		
+	}
+
+	if (api_hook_mask & ID_VirtualProtectEx) {
+		DetourAttach(&(PVOID&)Real_VirtualProtectEx, &(PVOID&)Mine_VirtualProtectEx);
 	}
 
 	return DetourTransactionCommit() == NO_ERROR;
@@ -963,7 +971,17 @@ bool XDbgController::freeMemory(LPVOID lpAddress, size_t dwSize, DWORD  dwFreeTy
 
 bool XDbgController::setMemoryProtection(LPVOID lpAddress, size_t dwSize, DWORD flNewProtect, PDWORD lpflOldProtect)
 {
-	return NULL;
+	ApiCallPacket outPkt;
+	ApiReturnPakcet inPkt;
+	outPkt.apiId = ID_VirtualProtectEx;
+	outPkt.VirtualProtectEx.addr = lpAddress;
+	outPkt.VirtualProtectEx.size = dwSize;
+	outPkt.VirtualProtectEx.prot = flNewProtect;
+	sendApiCall(outPkt, inPkt);
+	if (inPkt.VirtualProtectEx.result)
+		if (lpflOldProtect)
+			*lpflOldProtect = inPkt.VirtualProtectEx.oldProt;
+	return inPkt.VirtualProtectEx.result == TRUE;
 }
 
 size_t XDbgController::queryMemory(LPCVOID lpAddress, PMEMORY_BASIC_INFORMATION lpBuffer, size_t dwLength)
@@ -1084,8 +1102,9 @@ BOOL __stdcall Mine_VirtualProtectEx(HANDLE a0,
 	DWORD a3,
 	PDWORD a4)
 {
-
-	return NULL;
+	if (XDbgController::instance().getProcessId() == GetProcessIdFromHandle(a0))
+		return XDbgController::instance().setMemoryProtection(a1, a2, a3, a4);
+	return Real_VirtualProtectEx(a0, a1, a2, a3, a4);
 }
 
 DWORD_PTR __stdcall Mine_VirtualQueryEx(HANDLE a0,

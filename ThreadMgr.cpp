@@ -1,7 +1,7 @@
 #include <Windows.h>
 #include "ThreadMgr.h"
 #include <tlhelp32.h>
-#include "common.h"
+#include "Utils.h"
 
 ThreadMgr::ThreadMgr()
 {
@@ -55,7 +55,7 @@ HANDLE ThreadMgr::addThread(DWORD tid)
 	HANDLE hThread = openThread(THREAD_ALL_ACCESS, FALSE, tid);
 	if (hThread == NULL) {
 		MyTrace("%s(): openThread() failed. errno: %x", __FUNCTION__, GetLastError());
-		// assert(false);
+		assert(false);
 		hThread = (HANDLE)-1;
 	}
 
