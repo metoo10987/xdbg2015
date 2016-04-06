@@ -7,6 +7,7 @@
 #include <map>
 #include "common.h"
 #include "ThreadMgr.h"
+#include "Utils.h"
 
 class XDbgProxy : protected Thread, public ThreadMgr, protected Mutex
 {
@@ -40,6 +41,7 @@ protected:
 		union _LDR_DLL_NOTIFICATION_DATA* NotificationData, PVOID Context);
 
 	LONG CALLBACK VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo);
+	LONG CALLBACK AsyncVectoredHandler(DebugEventPacket& pkt);
 	bool createEventPipe();
 	bool createApiPipe();
 	// bool createPipe();
@@ -51,15 +53,22 @@ protected:
 	BOOL recvDbgAck(struct DebugAckPacket& ack);
 	BOOL sendDbgEvent(const DebugEventPacket& event, struct DebugAckPacket& ack, bool freeze = true);
 
-	void postDbgEvent(const DebugEventPacket& event);
-
 	void onDbgConnect();
 	void onDbgDisconnect();
 
 	void sendProcessInfo(DWORD firstThread);
 	void sendModuleInfo(DWORD firstThread);
 	void sendThreadInfo();
+	
+	//////////////////////////////////////////////////////////////////////////
+	struct DbgEventEntry {
+		SLIST_ENTRY			entry;
+		DebugEventPacket	pkt;
+	};
 
+	void postDbgEvent(DebugEventPacket& pkt);
+	void sendExceptEvent(DebugEventPacket& pkt);
+	bool popDbgEvent(DebugEventPacket& pkt);
 	//////////////////////////////////////////////////////////////////////////
 	// REMOTE API
 	class ApiThread : public Thread {
@@ -103,8 +112,16 @@ protected:
 	ULONG					_lastExceptCode;
 	PVOID					_lastExceptAddr;
 	volatile int			_stopFlag;
-	typedef std::list<DebugEventPacket> DbgEvtPkgs;
-	DbgEvtPkgs				_pendingEvents;
+	// typedef std::list<DebugEventPacket> DbgEvtPkgs;
+	// DbgEvtPkgs				_pendingEvents;
+	PSLIST_HEADER			_pendingEvents;
+
+	// event completion notification
+	HANDLE					_exceptHandled;
+	// HANDLE					_dllHandled;
+	// HANDLE					_threadHandled;
+	LONG					_exceptHandleCode;
+
 	PVOID					_vehCookie;
 	PVOID					_dllNotifCooike;
 
@@ -114,4 +131,6 @@ protected:
 	typedef std::map<DWORD, RemoteApiHandler> RemoteApiHandlers;
 
 	RemoteApiHandlers		_apiHandlers;
+
+	LockFreeQueue<DebugEventPacket>	_eventQueue;
 };

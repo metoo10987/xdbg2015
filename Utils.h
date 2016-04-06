@@ -1,5 +1,7 @@
 #pragma once
 
+// #include <algorithm>
+
 #ifdef _DEBUG
 void _MyTrace(LPCSTR fmt, ...);
 #define MyTrace		_MyTrace
@@ -20,6 +22,191 @@ void* CastProcAddr(T p)
 	u1.var = p;
 	return u1.f;
 };
+
+//////////////////////////////////////////////////////////////////////////
+#define QUEUE_SIZE 16
+static size_t __declspec(thread) __thr_id;
+
+/**
+* @return continous thread IDs starting from 0 as opposed to pthread_self().
+*/
+inline size_t
+thr_id()
+{
+	return __thr_id;
+}
+
+inline void
+set_thr_id(size_t id)
+{
+	__thr_id = id;
+}
+
+template<class T,
+	decltype(thr_id) ThrId = thr_id,
+	unsigned long Q_SIZE = QUEUE_SIZE>
+class LockFreeQueue {
+private:
+	static const unsigned long Q_MASK = Q_SIZE - 1;
+
+	struct ThrPos {
+		unsigned long head, tail;
+	};
+
+public:
+	LockFreeQueue(size_t n_producers, size_t n_consumers)
+		: n_producers_(n_producers),
+		n_consumers_(n_consumers),
+		head_(0),
+		tail_(0),
+		last_head_(0),
+		last_tail_(0)
+	{
+		auto n = max(n_consumers_, n_producers_);
+		thr_p_ = (ThrPos *)::_aligned_malloc(sizeof(ThrPos) * n, MEMORY_ALLOCATION_ALIGNMENT);
+		assert(thr_p_);
+		// Set per thread tail and head to ULONG_MAX.
+		::memset((void *)thr_p_, 0xFF, sizeof(ThrPos) * n);
+
+		ptr_array_ = (T **)::_aligned_malloc(Q_SIZE * sizeof(void *), MEMORY_ALLOCATION_ALIGNMENT);
+
+		assert(ptr_array_);
+	}
+
+	~LockFreeQueue()
+	{
+		::free(ptr_array_);
+		::free(thr_p_);
+	}
+
+	ThrPos&
+		thr_pos() const
+	{
+		assert(ThrId() < max(n_consumers_, n_producers_));
+		return thr_p_[ThrId()];
+	}
+
+	void
+		push(T *ptr)
+	{
+		/*
+		* Request next place to push.
+		*
+		* Second assignemnt is atomic only for head shift, so there is
+		* a time window in which thr_p_[tid].head = ULONG_MAX, and
+		* head could be shifted significantly by other threads,
+		* so pop() will set last_head_ to head.
+		* After that thr_p_[tid].head is setted to old head value
+		* (which is stored in local CPU register) and written by @ptr.
+		*
+		* First assignment guaranties that pop() sees values for
+		* head and thr_p_[tid].head not greater that they will be
+		* after the second assignment with head shift.
+		*
+		* Loads and stores are not reordered with locked instructions,
+		* se we don't need a memory barrier here.
+		*/
+		thr_pos().head = head_;
+		thr_pos().head = ::InterlockedAdd((volatile LONG_PTR* )&head_, 1);
+
+		/*
+		* We do not know when a consumer uses the pop()'ed pointer,
+		* se we can not overwrite it and have to wait the lowest tail.
+		*/
+		while (thr_pos().head >= last_tail_ + Q_SIZE)
+		{
+			auto min = tail_;
+
+			// Update the last_tail_.
+			for (size_t i = 0; i < n_consumers_; ++i) {
+				auto tmp_t = thr_p_[i].tail;
+
+				// Force compiler to use tmp_h exactly once.
+				MemoryBarrier();
+
+				if (tmp_t < min)
+					min = tmp_t;
+			}
+			last_tail_ = min;
+
+			if (thr_pos().head < last_tail_ + Q_SIZE)
+				break;
+			_mm_pause();
+		}
+
+		ptr_array_[thr_pos().head & Q_MASK] = ptr;
+
+		// Allow consumers eat the item.
+		thr_pos().head = ULONG_MAX;
+	}
+
+	T *
+		pop()
+	{
+		/*
+		* Request next place from which to pop.
+		* See comments for push().
+		*
+		* Loads and stores are not reordered with locked instructions,
+		* se we don't need a memory barrier here.
+		*/
+		thr_pos().tail = tail_;
+		thr_pos().tail = ::InterlockedAdd((volatile LONG_PTR*)&tail_, 1);
+
+		/*
+		* tid'th place in ptr_array_ is reserved by the thread -
+		* this place shall never be rewritten by push() and
+		* last_tail_ at push() is a guarantee.
+		* last_head_ guaraties that no any consumer eats the item
+		* before producer reserved the position writes to it.
+		*/
+		while (thr_pos().tail >= last_head_)
+		{
+			auto min = head_;
+
+			// Update the last_head_.
+			for (size_t i = 0; i < n_producers_; ++i) {
+				auto tmp_h = thr_p_[i].head;
+
+				// Force compiler to use tmp_h exactly once.
+				MemoryBarrier();
+
+				if (tmp_h < min)
+					min = tmp_h;
+			}
+			last_head_ = min;
+
+			if (thr_pos().tail < last_head_)
+				break;
+			_mm_pause();
+		}
+
+		T *ret = ptr_array_[thr_pos().tail & Q_MASK];
+		// Allow producers rewrite the slot.
+		thr_pos().tail = ULONG_MAX;
+		return ret;
+	}
+
+private:
+	/*
+	* The most hot members are cacheline aligned to avoid
+	* False Sharing.
+	*/
+
+	const size_t n_producers_, n_consumers_;
+	// currently free position (next to insert)
+	volatile ULONG_PTR	head_ ;
+	// current tail, next to pop
+	volatile ULONG_PTR	tail_;
+	// last not-processed producer's pointer
+	volatile ULONG_PTR	last_head_;
+	// last not-processed consumer's pointer
+	volatile ULONG_PTR	last_tail_;
+	ThrPos		*thr_p_;
+	T		**ptr_array_;
+};
+
+//////////////////////////////////////////////////////////////////////////
 
 template <typename T1, typename T2>
 inline void copyDbgRegs(T1& dest, const T2& src)

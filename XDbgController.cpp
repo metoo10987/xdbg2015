@@ -858,13 +858,14 @@ bool XDbgController::hookDbgApi()
 bool XDbgController::setThreadContext(HANDLE hThread, const CONTEXT* ctx)
 {
 	DWORD currentThreadId = getEventThreadId();
-	if (currentThreadId) {
-		DWORD threadId = GetThreadIdFromHandle(hThread);
-		if (threadId == 0) {
-			assert(false);
-			return _setThreadContext(hThread, ctx);
-		}
+	DWORD threadId = GetThreadIdFromHandle(hThread);
+	if (threadId == 0) {
+		// assert(false);
+		return Real_SetThreadContext(hThread, ctx) == TRUE;
+	}
 
+	if (currentThreadId) {
+		
 		if (threadId == currentThreadId && getEventCode() == EXCEPTION_DEBUG_EVENT) {
 			_ContextFlags |= ctx->ContextFlags;
 			cloneThreadContext(&_event.ctx, ctx, ctx->ContextFlags);
@@ -878,19 +879,19 @@ bool XDbgController::setThreadContext(HANDLE hThread, const CONTEXT* ctx)
 			*(PDWORD)&ctx->EFlags &= ~SINGLE_STEP_FLAG;
 	}
 
-	return _setThreadContext(hThread, ctx);
+	return _setThreadContext(threadId, hThread, ctx);
 }
 
 bool XDbgController::getThreadContext(HANDLE hThread, CONTEXT* ctx)
 {
 	DWORD currentThreadId = getEventThreadId();
-	if (currentThreadId) {
+	DWORD threadId = GetThreadIdFromHandle(hThread);
+	if (threadId == 0) {
+		// assert(false);
+		return Real_GetThreadContext(hThread, ctx) == TRUE;
+	}
 
-		DWORD threadId = GetThreadIdFromHandle(hThread);
-		if (threadId == 0) {
-			assert(false);
-			return _getThreadContext(hThread, ctx);
-		}
+	if (currentThreadId) {		
 
 		if (threadId == currentThreadId && getEventCode() == EXCEPTION_DEBUG_EVENT) {
 			cloneThreadContext(ctx, &_event.ctx, ctx->ContextFlags);
@@ -906,10 +907,10 @@ bool XDbgController::getThreadContext(HANDLE hThread, CONTEXT* ctx)
 
 	}
 
-	return _getThreadContext(hThread, ctx);
+	return _getThreadContext(threadId, hThread, ctx);
 }
 
-bool XDbgController::_setThreadContext(HANDLE hThread, const CONTEXT* ctx)
+bool XDbgController::_setThreadContext(DWORD threadId, HANDLE hThread, const CONTEXT* ctx)
 {
 	if (isRemoteApi() && (api_hook_mask & ID_SetThreadContext)) {
 		DWORD tid = GetThreadIdFromHandle(hThread);
@@ -929,7 +930,7 @@ bool XDbgController::_setThreadContext(HANDLE hThread, const CONTEXT* ctx)
 		return ::Real_SetThreadContext(hThread, ctx) == TRUE;
 }
 
-bool XDbgController::_getThreadContext(HANDLE hThread, CONTEXT* ctx)
+bool XDbgController::_getThreadContext(DWORD threadId, HANDLE hThread, CONTEXT* ctx)
 {
 	if (isRemoteApi() && (api_hook_mask & ID_GetThreadContext)) {
 		DWORD tid = GetThreadIdFromHandle(hThread);
