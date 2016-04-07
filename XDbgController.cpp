@@ -230,6 +230,12 @@ bool XDbgController::stop(DWORD pid)
 	return true;
 }
 
+extern BOOL(__stdcall * Real_ReadProcessMemory)(HANDLE a0,
+	LPCVOID a1,
+	LPVOID a2,
+	DWORD_PTR a3,
+	PDWORD_PTR a4);
+
 bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 {
 	MyTrace("%s()", __FUNCTION__);
@@ -318,7 +324,7 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 			SIZE_T len;
 			if (lpDebugEvent->u.LoadDll.fUnicode){
 				wchar_t buf[MAX_PATH];
-				if (!ReadProcessMemory(_hProcess, lpDebugEvent->u.LoadDll.lpImageName, buf, sizeof(buf), &len)) {
+				if (!GetModuleFileNameExW(_hProcess, (HMODULE)lpDebugEvent->u.LoadDll.lpBaseOfDll, buf, sizeof(buf) - 1)) {
 					assert(false);
 					break;
 				}
@@ -474,20 +480,20 @@ BOOL(__stdcall * Real_WriteProcessMemory)(HANDLE a0,
 	PDWORD_PTR a4)
 	= WriteProcessMemory;
 
-/* DWORD(WINAPI * Real_GetModuleFileNameExW)(HANDLE hProcess,
+DWORD(WINAPI * Real_GetModuleFileNameExW)(HANDLE hProcess,
 	HMODULE hModule,
 	LPWSTR lpFilename,
 	DWORD nSize)
-	= GetModuleFileNameExW; */
+	= GetModuleFileNameExW;
 
-NTSTATUS(NTAPI * Real_NtQueryInformationProcess)(
+/* NTSTATUS(NTAPI * Real_NtQueryInformationProcess)(
 	HANDLE ProcessHandle,
 	ULONG_PTR ProcessInformationClass,
 	PVOID ProcessInformation,
 	ULONG ProcessInformationLength,
 	PULONG ReturnLength)
 	= (NTSTATUS(NTAPI * )(HANDLE, ULONG_PTR, PVOID, ULONG, PULONG))
-	GetProcAddress(GetModuleHandle("ntdll.dll"), "NtQueryInformationProcess");
+	GetProcAddress(GetModuleHandle("ntdll.dll"), "NtQueryInformationProcess"); */
 
 DWORD(__stdcall * Real_SuspendThread)(HANDLE a0)
 = SuspendThread;
@@ -729,6 +735,11 @@ BOOL __stdcall Mine_VirtualProtectEx(HANDLE a0,
 	DWORD a3,
 	PDWORD a4);
 
+DWORD WINAPI Mine_GetModuleFileNameExW(HANDLE hProcess,
+	HMODULE hModule,
+	LPWSTR lpFilename,
+	DWORD nSize);
+
 BOOL __stdcall Mine_WaitForDebugEvent(LPDEBUG_EVENT a0,
 	DWORD a1)
 {
@@ -850,6 +861,10 @@ bool XDbgController::hookDbgApi()
 
 	if (api_hook_mask & ID_VirtualProtectEx) {
 		DetourAttach(&(PVOID&)Real_VirtualProtectEx, &(PVOID&)Mine_VirtualProtectEx);
+	}
+
+	if (api_hook_mask & ID_GetModuleFileNameExW) {
+		DetourAttach(&(PVOID&)Real_GetModuleFileNameExW, &(PVOID&)Mine_GetModuleFileNameExW);
 	}
 
 	return DetourTransactionCommit() == NO_ERROR;
@@ -1080,6 +1095,21 @@ bool XDbgController::writeMemory(LPVOID lpBaseAddress, LPCVOID lpBuffer, size_t 
 	return true;
 }
 
+DWORD XDbgController::getModuleFileName(HMODULE hMod, wchar_t* fileName, DWORD len)
+{
+	ApiCallPacket outPkt;
+	ApiReturnPakcet inPkt;
+	outPkt.apiId = ID_GetModuleFileNameExW;
+
+	outPkt._GetModuleFileNameExW.hMod = hMod;
+
+	sendApiCall(outPkt, inPkt);
+	if (inPkt._GetModuleFileNameExW.result > len)
+		return 0;
+	lstrcpyW(fileName, inPkt._GetModuleFileNameExW.fileName);
+	return inPkt._GetModuleFileNameExW.result;
+}
+
 LPVOID __stdcall Mine_VirtualAllocEx(HANDLE a0,
 	LPVOID a1,
 	SIZE_T a2,
@@ -1140,17 +1170,17 @@ BOOL __stdcall Mine_WriteProcessMemory(HANDLE a0,
 	return Real_WriteProcessMemory(a0, a1, a2, a3, a4);
 }
 
-/*
-DWORD WINAPI Mine_GetModuleFileNameExW)(HANDLE hProcess,
+DWORD WINAPI Mine_GetModuleFileNameExW(HANDLE hProcess,
 HMODULE hModule,
 LPWSTR lpFilename,
 DWORD nSize)
 {
-
+	if (XDbgController::instance().getProcessId() == GetProcessIdFromHandle(hProcess))
+		return XDbgController::instance().getModuleFileName(hModule, lpFilename, nSize);
+	return Real_GetModuleFileNameExW(hProcess, hModule, lpFilename, nSize);
 }
-*/
 
-NTSTATUS NTAPI Mine_NtQueryInformationProcess(
+/* NTSTATUS NTAPI Mine_NtQueryInformationProcess(
 	HANDLE ProcessHandle,
 	ULONG_PTR ProcessInformationClass,
 	PVOID ProcessInformation,
@@ -1160,6 +1190,7 @@ NTSTATUS NTAPI Mine_NtQueryInformationProcess(
 {
 	return 0;
 }
+*/
 
 DWORD XDbgController::suspendThread(HANDLE hThread)
 {

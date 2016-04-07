@@ -125,6 +125,10 @@ struct ApiCallPacket {
 			SIZE_T		size;
 			DWORD		type;
 		} VirtualFreeEx;
+
+		struct {
+			HMODULE		hMod;
+		} _GetModuleFileNameExW;
 	};
 };
 
@@ -177,6 +181,11 @@ struct ApiReturnPakcet {
 		struct {
 			BOOL		result;
 		} VirtualFreeEx;
+
+		struct {
+			wchar_t		fileName[MAX_PATH];
+			DWORD		result;
+		} _GetModuleFileNameExW;
 	};
 };
 

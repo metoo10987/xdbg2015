@@ -101,6 +101,7 @@ protected:
 	void GetThreadContext(ApiCallPacket& inPkt);
 	void SetThreadContext(ApiCallPacket& inPkt);
 	void VirtualProtectEx(ApiCallPacket& inPkt);
+	void _GetModuleFileNameExW(ApiCallPacket& inPkt);
 
 	//////////////////////////////////////////////////////////////////////////
 

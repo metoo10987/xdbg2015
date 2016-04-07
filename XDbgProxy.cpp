@@ -743,6 +743,7 @@ void XDbgProxy::registerRemoteApi()
 	_apiHandlers[ID_VirtualProtectEx] = &XDbgProxy::VirtualProtectEx;
 	_apiHandlers[ID_GetThreadContext] = &XDbgProxy::GetThreadContext;
 	_apiHandlers[ID_SetThreadContext] = &XDbgProxy::SetThreadContext;
+	_apiHandlers[ID_GetModuleFileNameExW] = &XDbgProxy::_GetModuleFileNameExW;	
 }
 
 BOOL XDbgProxy::recvApiCall(ApiCallPacket& inPkt)
@@ -1117,6 +1118,23 @@ void XDbgProxy::VirtualProtectEx(ApiCallPacket& inPkt)
 #ifdef _API_TRACE
 	MyTrace("%s(): addr: %p, result: %d, errno: %d", __FUNCTION__, inPkt.VirtualProtectEx.addr,
 		outPkt.VirtualProtectEx.result, outPkt.lastError);
+#endif
+
+	sendApiReturn(outPkt);
+}
+
+void XDbgProxy::_GetModuleFileNameExW(ApiCallPacket& inPkt)
+{
+	ApiReturnPakcet outPkt;
+	outPkt._GetModuleFileNameExW.result = ::GetModuleFileNameExW(GetCurrentProcess(), 
+		inPkt._GetModuleFileNameExW.hMod, outPkt._GetModuleFileNameExW.fileName, 
+		sizeof(outPkt._GetModuleFileNameExW.fileName));
+
+	outPkt.lastError = GetLastError();
+
+#ifdef _API_TRACE
+	MyTrace("%s(): hMod: %p, result: %d, errno: %d", __FUNCTION__, inPkt._GetModuleFileNameExW.hMod,
+		outPkt._GetModuleFileNameExW.result, outPkt.lastError);
 #endif
 
 	sendApiReturn(outPkt);

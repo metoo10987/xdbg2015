@@ -35,6 +35,7 @@ public:
 	bool writeMemory(LPVOID lpBaseAddress, LPCVOID lpBuffer, size_t nSize, size_t * lpNumberOfBytesWritten);
 	DWORD suspendThread(HANDLE hThread);
 	DWORD resumeThread(HANDLE hThread);
+	DWORD getModuleFileName(HMODULE hMod, wchar_t* fileName, DWORD len);
 
 	DWORD getEventCode() const
 	{

@@ -490,7 +490,7 @@ void initMode2()
 	ModifyExe();
 	inject_method = 1; // WIN HOOK
 	api_hook_mask = ID_ReadProcessMemory | ID_WriteProcessMemory | ID_SuspendThread | ID_ResumeThread | 
-		ID_GetThreadContext | ID_SetThreadContext;
+		ID_GetThreadContext | ID_SetThreadContext | ID_VirtualQueryEx | ID_VirtualProtectEx | ID_GetModuleFileNameExW;
 	MyTrace("xdbgcore initializing. mode: 2");
 	if (!XDbgController::instance().initialize(hInstance, true)) {
 		// log error
