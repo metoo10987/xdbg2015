@@ -76,23 +76,10 @@ BOOL XDbgProxy::sendDbgEvent(const DebugEventPacket& event, struct DebugAckPacke
 	return result;
 }
 
-/* void XDbgProxy::postDbgEvent(DebugEventPacket& pkt)
-{
-	// FIEME: it's a stack, MUST BE A FIFO
-	/*DbgEventEntry* entry = (DbgEventEntry*)_aligned_malloc(sizeof(DbgEventEntry), 
-		MEMORY_ALLOCATION_ALIGNMENT);
-	entry->pkt = pkt;
-	InterlockedPushEntrySList(_pendingEvents, &entry->entry);* /
-	_eventQueue.push(&pkt);
-} */
-
 void XDbgProxy::pushDbgEvent(DebugEventPacket& pkt)
 {
-	// FIEME: it's a stack, MUST BE A FIFO
-	/* DbgEventEntry* entry = (DbgEventEntry*)_aligned_malloc(sizeof(DbgEventEntry), 
-		MEMORY_ALLOCATION_ALIGNMENT); 
-	entry->pkt = pkt; */	
-	// InterlockedPushEntrySList(_pendingEvents, &entry->entry);
+	MutexGuard guard2(&_evtLock);
+
 	{
 		MutexGuard guard(&_evtQueueLock);
 		::ResetEvent(_evtQueueEvent);
@@ -104,16 +91,6 @@ void XDbgProxy::pushDbgEvent(DebugEventPacket& pkt)
 
 bool XDbgProxy::popDbgEvent(DebugEventPacket& pkt)
 {
-	// FIEME: it's a stack, MUST BE A FIFO
-	/* DbgEventEntry* entry = (DbgEventEntry* )InterlockedPopEntrySList(_pendingEvents);
-	if (entry) {
-		pkt = entry->pkt;
-		_aligned_free(entry);
-		return true;
-	}
-
-	return false; */
-	
 	if (!_evtQueueLock.trylock())
 		return false;
 
@@ -167,24 +144,12 @@ VOID CALLBACK XDbgProxy::LdrDllNotification(ULONG NotificationReason, PCLDR_DLL_
 	// FIXME: 
 	// 加载 Dll 可能在 APC 中进行， 这会导致其它的通知过程（sendDbgEvent）被打断， 造成错误
 	// 现在 Dll 相关的通知全部缓存， 但是会导致 LoadDll 断点失效
-
-	// _pendingEvents.push_back(event);
 	pushDbgEvent(event);
-	/* DebugAckPacket ack;
-	if (!sendDbgEvent(event, ack)) {
-
-	} */
 }
 
 bool XDbgProxy::initialize()
 {
-	/*_pendingEvents = (PSLIST_HEADER)_aligned_malloc(sizeof(SLIST_HEADER),
-		MEMORY_ALLOCATION_ALIGNMENT);
-	InitializeSListHead(_pendingEvents); */
-
 	_evtQueueEvent = ::CreateEvent(NULL, TRUE, FALSE, NULL);
-	// _dllHandled = ::CreateEvent(NULL, TRUE, FALSE, NULL);
-	// _threadHandled = ::CreateEvent(NULL, TRUE, FALSE, NULL);
 	if (!(/* _threadHandled && _dllHandled && */ _evtQueueEvent)) {
 		assert(false);
 		return false;
@@ -261,8 +226,10 @@ void XDbgProxy::stop()
 LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 {
 	// MyTrace("%s()", __FUNCTION__);
+
 	if (!_attached)
 		return EXCEPTION_CONTINUE_SEARCH;
+
 	DWORD currentTid = XDbgGetCurrentThreadId();
 	if (currentTid == getId() || currentTid == _apiThread.getId())
 		return EXCEPTION_CONTINUE_SEARCH;
@@ -275,8 +242,6 @@ LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 	msg.dwThreadId = XDbgGetCurrentThreadId();
 	msg.dwDebugEventCode = EXCEPTION_DEBUG_EVENT;
 	msg.u.Exception.ExceptionRecord.ExceptionInformation[0] = (ULONG_PTR )ExceptionInfo;
-	// msg.u.Exception.ExceptionRecord = *ExceptionInfo->ExceptionRecord;
-	// event.ctx = *ExceptionInfo->ContextRecord;
 	pushDbgEvent(event);
 	return _exceptHandleCode;
 }
@@ -415,9 +380,6 @@ BOOL XDbgProxy::DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved)
 	memset(&event, 0, sizeof(event));
 
 	DEBUG_EVENT& msg = event.event;
-	// DebugAckPacket ack;
-	
-	// MutexGuard guard(this);
 
 	switch (reason) {
 	case DLL_PROCESS_ATTACH:
@@ -427,71 +389,58 @@ BOOL XDbgProxy::DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved)
 			dllPath[sizeof(dllPath) - 1] = 0;
 			LoadLibrary(dllPath);
 		}
-		// MyTrace("%s(): process(%u) xdbg proxy loaded. thread id: %u", __FUNCTION__, GetCurrentProcessId(), GetCurrentThreadId());
+		// MyTrace("%s(): process(%u) xdbg proxy loaded. thread id: %u", __FUNCTION__, 
+		//		GetCurrentProcessId(), GetCurrentThreadId());
 		break;
 
 	case DLL_PROCESS_DETACH:
-		// MyTrace("%s(): process(%u) xdbg proxy unloaded. thread id: %u", __FUNCTION__, GetCurrentProcessId(), GetCurrentThreadId());
+		// MyTrace("%s(): process(%u) xdbg proxy unloaded. thread id: %u", __FUNCTION__, 
+		//		GetCurrentProcessId(), GetCurrentThreadId());
 		break;
 
 	case DLL_THREAD_ATTACH:
 
-		{
-			//MyTrace("%s(): process(%u) xdbg proxy attach thread. thread id: %u <<<", __FUNCTION__,
-			//	XDbgGetCurrentProcessId(), XDbgGetCurrentThreadId());
+		//MyTrace("%s(): process(%u) xdbg proxy attach thread. thread id: %u <<<", __FUNCTION__,
+		//	XDbgGetCurrentProcessId(), XDbgGetCurrentThreadId());
 
-			if (!_attached)
-				return TRUE;
+		if (!_attached)
+			return TRUE;
 
-			/* if (threadIdToHandle(XDbgGetCurrentThreadId()) != NULL) {
-				// reentry
-				return TRUE;
-			} */
-
-			// REPORT CreateThread
-			msg.dwProcessId = XDbgGetCurrentProcessId();
-			msg.dwThreadId = XDbgGetCurrentThreadId();
-			msg.dwDebugEventCode = CREATE_THREAD_DEBUG_EVENT;
-			msg.u.CreateThread.hThread = NULL;
+		// REPORT CreateThread
+		msg.dwProcessId = XDbgGetCurrentProcessId();
+		msg.dwThreadId = XDbgGetCurrentThreadId();
+		msg.dwDebugEventCode = CREATE_THREAD_DEBUG_EVENT;
+		msg.u.CreateThread.hThread = NULL;
 		
-			msg.u.CreateThread.lpStartAddress = (LPTHREAD_START_ROUTINE )
-				GetThreadStartAddress(XDbgGetCurrentThread());
+		msg.u.CreateThread.lpStartAddress = (LPTHREAD_START_ROUTINE )
+			GetThreadStartAddress(XDbgGetCurrentThread());
 
-			msg.u.CreateThread.lpThreadLocalBase = NtCurrentTeb();
+		msg.u.CreateThread.lpThreadLocalBase = NtCurrentTeb();
 
-			pushDbgEvent(event);
-			// addThread(XDbgGetCurrentThreadId());
-			//MyTrace("%s(): process(%u) xdbg proxy attach thread. thread id: %u >>>", __FUNCTION__,
-			//	GetCurrentProcessId(), GetCurrentThreadId());
-		}
+		pushDbgEvent(event);
+		//MyTrace("%s(): process(%u) xdbg proxy attach thread. thread id: %u >>>", __FUNCTION__,
+		//	GetCurrentProcessId(), GetCurrentThreadId());
 		break;
 
 	case DLL_THREAD_DETACH:
 		// REPORT ExitThread
-		{
-			//MyTrace("%s(): process(%u) xdbg proxy detach thread. thread id: %u <<<", __FUNCTION__,
-			//	GetCurrentProcessId(), GetCurrentThreadId());
 
-			if (!_attached)
-				return TRUE;
+		//MyTrace("%s(): process(%u) xdbg proxy detach thread. thread id: %u <<<", __FUNCTION__,
+		//	GetCurrentProcessId(), GetCurrentThreadId());
 
-			/* if (threadIdToHandle(GetCurrentThreadId()) == NULL) {
-				// reentry
-				return TRUE;
-			} */
+		if (!_attached)
+			return TRUE;
 
-			msg.dwProcessId = XDbgGetCurrentProcessId();
-			msg.dwThreadId = XDbgGetCurrentThreadId();
-			msg.dwDebugEventCode = EXIT_THREAD_DEBUG_EVENT;
-			if (!GetExitCodeThread(XDbgGetCurrentThread(), &msg.u.ExitThread.dwExitCode))
-				msg.u.ExitThread.dwExitCode = 0;
+		msg.dwProcessId = XDbgGetCurrentProcessId();
+		msg.dwThreadId = XDbgGetCurrentThreadId();
+		msg.dwDebugEventCode = EXIT_THREAD_DEBUG_EVENT;
+		if (!GetExitCodeThread(XDbgGetCurrentThread(), &msg.u.ExitThread.dwExitCode))
+			msg.u.ExitThread.dwExitCode = 0;
 
-			pushDbgEvent(event);
+		pushDbgEvent(event);
 
-			// delThread(XDbgGetCurrentThreadId());
-			//MyTrace("%s(): process(%u) xdbg proxy detach thread. thread id: %u >>>", __FUNCTION__,
-			//	GetCurrentProcessId(), GetCurrentThreadId());
-		}
+		//MyTrace("%s(): process(%u) xdbg proxy detach thread. thread id: %u >>>", __FUNCTION__,
+		//	GetCurrentProcessId(), GetCurrentThreadId());
 
 		break;
 	};
@@ -515,23 +464,22 @@ long XDbgProxy::run()
 
 		if (_attached) {
 			{
-				MutexGuard guard(this);
+				// MutexGuard guard(this);
 
 				DebugEventPacket event;
 				DebugAckPacket ack;
 
 				while (popDbgEvent(event)) {
-					// DebugEventPacket& event = _pendingEvents.front();
+
 					MyTrace("%s(): eventId: %d, threadId: %d", __FUNCTION__, event.event.dwDebugEventCode, 
 						event.event.dwThreadId);
 
 					switch (event.event.dwDebugEventCode) {
+
 					case EXCEPTION_DEBUG_EVENT:
-						//EXCEPTION_POINTERS exceptionPoints;
-						//exceptionPoints.ContextRecord = &event.ctx;
-						//exceptionPoints.ExceptionRecord = &event.event.u.Exception.ExceptionRecord;
-						_exceptHandleCode = AsyncVectoredHandler(event);						
+						_exceptHandleCode = AsyncVectoredHandler(event);
 						break;
+
 					case LOAD_DLL_DEBUG_EVENT:
 
 						if (!sendDbgEvent(event, ack)) {
@@ -576,8 +524,7 @@ long XDbgProxy::run()
 					}					
 
 					SetEvent(_evtQueueEvent);
-					// _aligned_free(entry);
-					// _pendingEvents.pop_front();
+					break;
 				}
 			}
 
@@ -1094,17 +1041,17 @@ void XDbgProxy::GetThreadContext(ApiCallPacket& inPkt)
 
 	// 如果被调试线程已经被suspend， 并且正在执行threadmgr中的函数， 这里就会死锁. 
 	// 所以改成OpenThread
-	// hThread = threadIdToHandle(inPkt.SuspendThread.threadId);
-	hThread = ::OpenThread(THREAD_ALL_ACCESS, FALSE, inPkt.SuspendThread.threadId);
+	hThread = threadIdToHandle(inPkt.SuspendThread.threadId);
+	// hThread = ::OpenThread(THREAD_ALL_ACCESS, FALSE, inPkt.SuspendThread.threadId);
 
 	if (hThread == NULL || hThread == (HANDLE )-1) {
 		outPkt.GetThreadContext.result = FALSE;
-		// SetLastError(ERROR_INVALID_PARAMETER);
+		SetLastError(ERROR_INVALID_PARAMETER);
 		MyTrace("%s(): cannot found the threadId: %d", __FUNCTION__, inPkt.GetThreadContext.threadId);
 	} else {
 		outPkt.GetThreadContext.ctx.ContextFlags = inPkt.GetThreadContext.contextFlags;
 		outPkt.GetThreadContext.result = ::GetThreadContext(hThread, &outPkt.GetThreadContext.ctx);
-		CloseHandle(hThread);
+		// CloseHandle(hThread);
 	}
 
 	outPkt.lastError = GetLastError();
@@ -1136,17 +1083,17 @@ void XDbgProxy::SetThreadContext(ApiCallPacket& inPkt)
 
 	// 如果被调试线程已经被suspend， 并且正在执行threadmgr中的函数， 这里就会死锁. 
 	// 所以改成OpenThread
-	// hThread = threadIdToHandle(inPkt.SuspendThread.threadId);
-	hThread = ::OpenThread(THREAD_ALL_ACCESS, FALSE, inPkt.SuspendThread.threadId);
+	hThread = threadIdToHandle(inPkt.SuspendThread.threadId);
+	// hThread = ::OpenThread(THREAD_ALL_ACCESS, FALSE, inPkt.SuspendThread.threadId);
 
 	if (hThread == NULL || hThread == (HANDLE)-1) {
 		outPkt.SetThreadContext.result = FALSE;
-		// SetLastError(ERROR_INVALID_PARAMETER);
+		SetLastError(ERROR_INVALID_PARAMETER);
 		MyTrace("%s(): cannot found the threadId: %d", __FUNCTION__, inPkt.SetThreadContext.threadId);
 	}
 	else {
 		outPkt.SetThreadContext.result = ::SetThreadContext(hThread, &inPkt.SetThreadContext.ctx);
-		CloseHandle(hThread);
+		// CloseHandle(hThread);
 	}
 
 	outPkt.lastError = GetLastError();

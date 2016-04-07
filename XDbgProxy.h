@@ -66,7 +66,6 @@ protected:
 		DebugEventPacket	pkt;
 	};
 
-	// void postDbgEvent(DebugEventPacket& pkt);
 	void pushDbgEvent(DebugEventPacket& pkt);
 	bool popDbgEvent(DebugEventPacket& pkt);
 	//////////////////////////////////////////////////////////////////////////
@@ -114,13 +113,11 @@ protected:
 	volatile int			_stopFlag;
 	typedef std::list<DebugEventPacket> DbgEvtPkgs;
 	DbgEvtPkgs				_pendingEvents;
-	// PSLIST_HEADER			_pendingEvents;
 
 	// event completion notification
 	HANDLE					_evtQueueEvent;
+	Mutex					_evtLock;
 	Mutex					_evtQueueLock;
-	// HANDLE					_dllHandled;
-	// HANDLE					_threadHandled;
 	LONG					_exceptHandleCode;
 
 	PVOID					_vehCookie;
@@ -132,6 +129,4 @@ protected:
 	typedef std::map<DWORD, RemoteApiHandler> RemoteApiHandlers;
 
 	RemoteApiHandlers		_apiHandlers;
-
-	// LockFreeQueue<DebugEventPacket>	_eventQueue;
 };
