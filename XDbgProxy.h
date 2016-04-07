@@ -66,8 +66,8 @@ protected:
 		DebugEventPacket	pkt;
 	};
 
-	void postDbgEvent(DebugEventPacket& pkt);
-	void sendExceptEvent(DebugEventPacket& pkt);
+	// void postDbgEvent(DebugEventPacket& pkt);
+	void pushDbgEvent(DebugEventPacket& pkt);
 	bool popDbgEvent(DebugEventPacket& pkt);
 	//////////////////////////////////////////////////////////////////////////
 	// REMOTE API
@@ -112,12 +112,13 @@ protected:
 	ULONG					_lastExceptCode;
 	PVOID					_lastExceptAddr;
 	volatile int			_stopFlag;
-	// typedef std::list<DebugEventPacket> DbgEvtPkgs;
-	// DbgEvtPkgs				_pendingEvents;
-	PSLIST_HEADER			_pendingEvents;
+	typedef std::list<DebugEventPacket> DbgEvtPkgs;
+	DbgEvtPkgs				_pendingEvents;
+	// PSLIST_HEADER			_pendingEvents;
 
 	// event completion notification
-	HANDLE					_exceptHandled;
+	HANDLE					_evtQueueEvent;
+	Mutex					_evtQueueLock;
 	// HANDLE					_dllHandled;
 	// HANDLE					_threadHandled;
 	LONG					_exceptHandleCode;
@@ -132,5 +133,5 @@ protected:
 
 	RemoteApiHandlers		_apiHandlers;
 
-	LockFreeQueue<DebugEventPacket>	_eventQueue;
+	// LockFreeQueue<DebugEventPacket>	_eventQueue;
 };
