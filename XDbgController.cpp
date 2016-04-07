@@ -200,9 +200,6 @@ bool XDbgController::stop(DWORD pid)
 {
 	assert(_pid == pid);
 
-	if (_hProcess == NULL)
-		return false;
-
 	if (getEventCode() != 0) {
 		continueEvent(pid, getEventThreadId(), DBG_CONTINUE);
 	}
@@ -217,11 +214,9 @@ bool XDbgController::stop(DWORD pid)
 		_hPipe = INVALID_HANDLE_VALUE;
 	}
 
-	if (exec_mode == 1) {
-		if (_hApiPipe != INVALID_HANDLE_VALUE) {
-			CloseHandle(_hApiPipe);
-			_hApiPipe = INVALID_HANDLE_VALUE;
-		}
+	if (_hApiPipe != INVALID_HANDLE_VALUE) {
+		CloseHandle(_hApiPipe);
+		_hApiPipe = INVALID_HANDLE_VALUE;
 	}
 
 	resetDbgEvent();

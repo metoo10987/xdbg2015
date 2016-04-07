@@ -223,6 +223,8 @@ void XDbgProxy::stop()
 	}
 }
 
+extern UINT ignore_dbgstr;
+
 LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 {
 	// MyTrace("%s()", __FUNCTION__);
@@ -233,6 +235,14 @@ LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 	DWORD currentTid = XDbgGetCurrentThreadId();
 	if (currentTid == getId() || currentTid == _apiThread.getId())
 		return EXCEPTION_CONTINUE_SEARCH;
+
+	if (ignore_dbgstr) {
+		if (ExceptionInfo->ExceptionRecord->ExceptionCode == DBG_PRINTEXCEPTION_C ||
+			ExceptionInfo->ExceptionRecord->ExceptionCode == DBG_PRINTEXCEPTION_WIDE_C) {
+			
+			return EXCEPTION_CONTINUE_SEARCH;
+		}
+	}
 
 	DebugEventPacket event;
 	memset(&event, 0, sizeof(event));
@@ -483,7 +493,7 @@ long XDbgProxy::run()
 					case LOAD_DLL_DEBUG_EVENT:
 
 						if (!sendDbgEvent(event, ack)) {
-
+							break;
 						}
 
 						if (event.event.dwDebugEventCode == LOAD_DLL_DEBUG_EVENT) {
@@ -495,11 +505,11 @@ long XDbgProxy::run()
 
 						if (threadIdToHandle(event.event.dwThreadId) != NULL) {
 							// reentry
-							return TRUE;
+							break;
 						}
 
 						if (!sendDbgEvent(event, ack)) {
-
+							break;
 						}
 
 						addThread(event.event.dwThreadId);
@@ -509,11 +519,11 @@ long XDbgProxy::run()
 
 						if (threadIdToHandle(event.event.dwThreadId) == NULL) {
 							// reentry
-							return TRUE;
+							break;;
 						}
 
 						if (!sendDbgEvent(event, ack)) {
-
+							break;
 						}
 
 						delThread(event.event.dwThreadId);
@@ -521,7 +531,7 @@ long XDbgProxy::run()
 
 					default:
 						break;
-					}					
+					}
 
 					SetEvent(_evtQueueEvent);
 					break;
