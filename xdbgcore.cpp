@@ -10,6 +10,7 @@
 #include "AutoDebug.h"
 #include "pluginsdk/_plugins.h"
 #include "Utils.h"
+#include <Psapi.h>
 
 #define XDBG_VER		(1)
 

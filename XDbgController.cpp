@@ -10,6 +10,7 @@
 extern UINT debug_if;
 extern UINT api_hook_mask;
 extern UINT inject_method;
+extern UINT32 ignore_dbgstr;
 
 std::vector<AutoDebug* > autoDebugHandlers;
 
@@ -159,7 +160,7 @@ BOOL XDbgController::injectDll(DWORD pid, HMODULE hInst)
 	}
 }
 
-bool XDbgController::attach(DWORD pid, DWORD tid)
+bool XDbgController::attach(DWORD pid, BOOL createProcess, DWORD tid)
 {
 	MyTrace("%s()", __FUNCTION__);
 
@@ -185,12 +186,17 @@ bool XDbgController::attach(DWORD pid, DWORD tid)
 		MyTrace("%s(): connection is unavailable");
 		disconnectInferior();
 		CloseHandle(_hProcess);
+		_hProcess = NULL;
 		assert(false);
 		return false;
 	}
 
 	assert(event.dwDebugEventCode == ATTACHED_EVENT);
-	continueEvent(event.dwProcessId, tid ? tid : event.dwThreadId, DBG_CONTINUE);	
+	DbgAttachArgs args;
+	args.ignore_dbgstr = ignore_dbgstr;
+	args.inject_method = inject_method;
+	args.createProcess = createProcess;
+	continueAttachEvent(event.dwProcessId, tid ? tid : event.dwThreadId, DBG_CONTINUE, args);
 	return true;
 }
 
@@ -386,6 +392,24 @@ bool XDbgController::continueEvent(DWORD dwProcessId, DWORD dwThreadId, DWORD dw
 	return true;
 }
 
+bool XDbgController::continueAttachEvent(DWORD dwProcessId, DWORD dwThreadId,
+	DWORD dwContinueStatus, const DbgAttachArgs& args)
+{
+	MyTrace("%s(): CONTINUE_EVENT: %x", __FUNCTION__, dwContinueStatus);
+	DebugAckPacket ack;
+	ack.dwProcessId = dwProcessId;
+	ack.dwThreadId = dwThreadId;
+	ack.dwContinueStatus = dwContinueStatus;
+	ack.args = args;
+	DWORD len;
+	if (!WriteFile(_hPipe, &ack, sizeof(ack), &len, NULL)) {
+		return false;
+	}
+
+	resetDbgEvent();
+	return true;
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 BOOL(__stdcall * Real_CreateProcessA)(LPCSTR a0,
@@ -532,7 +556,7 @@ BOOL __stdcall Mine_CreateProcessA(LPCSTR a0,
 	if (dbgctl.injectDll(a9->dwProcessId, dbgctl.getModuleHandle())) {
 		int i;
 		for (i = 30; i > 0; i--) {
-			if (dbgctl.attach(a9->dwProcessId, a9->dwThreadId))
+			if (dbgctl.attach(a9->dwProcessId, TRUE, a9->dwThreadId))
 				break;
 
 			Sleep(100);
@@ -584,7 +608,7 @@ BOOL __stdcall Mine_CreateProcessW(LPCWSTR a0,
 	if (dbgctl.injectDll(a9->dwProcessId, dbgctl.getModuleHandle())) {
 		int i;
 		for (i = 30; i > 0; i--) {
-			if (dbgctl.attach(a9->dwProcessId, a9->dwThreadId))
+			if (dbgctl.attach(a9->dwProcessId, TRUE, a9->dwThreadId))
 				break;
 
 			Sleep(100);
@@ -614,7 +638,7 @@ BOOL __stdcall Mine_DebugActiveProcess(DWORD a0)
 
 	int i;
 	for (i = 30; i > 0; i--) {
-		if (dbgctl.attach(a0, GetProcessMainThread(a0)))
+		if (dbgctl.attach(a0, FALSE, GetProcessMainThread(a0)))
 			break;
 
 		Sleep(100);

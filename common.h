@@ -18,29 +18,37 @@ static inline std::string makeApiPipeName(DWORD pid)
 #define EVENT_MESSAGE_SIZE		sizeof(DebugEventPacket)
 #define CONTINUE_MESSAGE_SIZE	sizeof(DebugAckPacket)
 
-struct DebugEventPacket {
-	union {
-		struct {
-			DEBUG_EVENT		event;
+struct DebugEventPacket {	
+	struct {
+		DEBUG_EVENT		event;
+		union {
 			CONTEXT			ctx;
+			// ANOTHER MEMBER;			
 		};
+	};	
+};
 
-		// ANOTHER MEMBER;
-	};
+struct DbgAttachArgs {
+	UINT32	ignore_dbgstr;
+	UINT32	inject_method;
+	BOOL	createProcess;
 };
 
 struct DebugAckPacket {
-	union {
-		struct {
-			DWORD	dwProcessId;
-			DWORD	dwThreadId;
-			DWORD	dwContinueStatus;
-			CONTEXT	ctx;
-			DWORD	ContextFlags;
-		};
+	struct {
+		DWORD	dwProcessId;
+		DWORD	dwThreadId;
+		DWORD	dwContinueStatus;
+		union {
+			struct {
+				CONTEXT	ctx;
+				DWORD	ContextFlags;
+			};			
 
-		// ANOTHER MEMBER;
-	};
+			// ANOTHER MEMBER;
+			DbgAttachArgs	args;
+		};
+	};	
 };
 
 #define SINGLE_STEP_FLAG				0x100

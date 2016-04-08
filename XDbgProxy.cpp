@@ -10,6 +10,9 @@
 #include "Utils.h"
 #include "common.h"
 
+extern UINT ignore_dbgstr;
+extern UINT inject_method;
+
 XDbgProxy::XDbgProxy(void) : _apiThread(*this)//, _eventQueue(1, 1)
 {
 	_hPipe = INVALID_HANDLE_VALUE;
@@ -222,8 +225,6 @@ void XDbgProxy::stop()
 		_hApiPipe = INVALID_HANDLE_VALUE;
 	}
 }
-
-extern UINT ignore_dbgstr;
 
 LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 {
@@ -588,13 +589,19 @@ void XDbgProxy::onDbgConnect()
 	event.event.dwThreadId = getFirstThread();
 	event.event.dwDebugEventCode = ATTACHED_EVENT; // THIS MSG DONT PASS TO DEBUGGER
 	sendDbgEvent(event, ack, false);
+	ignore_dbgstr = ack.args.ignore_dbgstr;
+	inject_method = ack.args.inject_method;
+	
 	sendProcessInfo(ack.dwThreadId);
 	sendThreadInfo();
 	sendModuleInfo(ack.dwThreadId);
 	// attach breakpoint
-	DWORD tid;
-	HANDLE hThread = ::CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE )DebugBreak, NULL, 0, &tid);
-	CloseHandle(hThread);
+	if (!ack.args.createProcess) {
+		DWORD tid;
+		HANDLE hThread = ::CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)DebugBreak, NULL, 0, &tid);
+		CloseHandle(hThread);
+	}
+
 	resumeAll(XDbgGetCurrentThreadId());
 }
 

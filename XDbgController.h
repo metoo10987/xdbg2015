@@ -13,10 +13,13 @@ public:
 	}
 
 	bool initialize(HMODULE hInst, bool hookDbgApi);
-	bool attach(DWORD pid, DWORD tid = 0);
+	bool attach(DWORD pid, BOOL createProcess, DWORD tid = 0);
 	bool stop(DWORD pid);
 	bool waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds = INFINITE);
 	bool continueEvent(DWORD dwProcessId, DWORD dwThreadId, DWORD dwContinueStatus);
+	bool continueAttachEvent(DWORD dwProcessId, DWORD dwThreadId, DWORD dwContinueStatus, 
+		const DbgAttachArgs& args);
+
 	bool connectRemoteApi(DWORD pid);
 	void disconnectRemoteApi();
 	HANDLE getProcessHandle() const
