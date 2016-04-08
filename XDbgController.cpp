@@ -11,6 +11,7 @@ extern UINT debug_if;
 extern UINT api_hook_mask;
 extern UINT inject_method;
 extern UINT32 ignore_dbgstr;
+extern UINT simu_attach_bp;
 
 std::vector<AutoDebug* > autoDebugHandlers;
 
@@ -196,6 +197,7 @@ bool XDbgController::attach(DWORD pid, BOOL createProcess, DWORD tid)
 	args.ignore_dbgstr = ignore_dbgstr;
 	args.inject_method = inject_method;
 	args.createProcess = createProcess;
+	args.simu_attach_bp = simu_attach_bp;
 	continueAttachEvent(event.dwProcessId, tid ? tid : event.dwThreadId, DBG_CONTINUE, args);
 	return true;
 }

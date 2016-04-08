@@ -19,8 +19,8 @@ UINT exec_mode = 0;
 UINT debug_if = 0;
 UINT api_hook_mask = ID_ReadProcessMemory | ID_WriteProcessMemory | ID_SuspendThread | ID_ResumeThread;
 UINT inject_method = 0;
-UINT ignore_dbgstr = 1;
-
+UINT ignore_dbgstr = 0;
+UINT simu_attach_bp = 1;
 // XDbgController* dbgctl = NULL;
 
 //////////////////////////////////////////////////////////////////////////
@@ -45,6 +45,7 @@ static void loadConfig()
 	api_hook_mask = GetPrivateProfileInt("xdbg", "api_hook_mask", api_hook_mask, iniName);
 	inject_method = GetPrivateProfileInt("xdbg", "inject_method", inject_method, iniName);
 	ignore_dbgstr = GetPrivateProfileInt("xdbg", "ignore_dbgstr", ignore_dbgstr, iniName);
+	simu_attach_bp = GetPrivateProfileInt("xdbg", "simu_attach_bp", simu_attach_bp, iniName);
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved)

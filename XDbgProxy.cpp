@@ -12,6 +12,7 @@
 
 extern UINT ignore_dbgstr;
 extern UINT inject_method;
+extern UINT simu_attach_bp;
 
 XDbgProxy::XDbgProxy(void) : _apiThread(*this)//, _eventQueue(1, 1)
 {
@@ -591,12 +592,13 @@ void XDbgProxy::onDbgConnect()
 	sendDbgEvent(event, ack, false);
 	ignore_dbgstr = ack.args.ignore_dbgstr;
 	inject_method = ack.args.inject_method;
-	
+	simu_attach_bp = ack.args.simu_attach_bp;
+
 	sendProcessInfo(ack.dwThreadId);
 	sendThreadInfo();
 	sendModuleInfo(ack.dwThreadId);
 	// attach breakpoint
-	if (!ack.args.createProcess) {
+	if (simu_attach_bp && !ack.args.createProcess) {
 		DWORD tid;
 		HANDLE hThread = ::CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)DebugBreak, NULL, 0, &tid);
 		CloseHandle(hThread);

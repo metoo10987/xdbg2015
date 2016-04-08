@@ -32,6 +32,7 @@ struct DbgAttachArgs {
 	UINT32	ignore_dbgstr;
 	UINT32	inject_method;
 	BOOL	createProcess;
+	UINT32	simu_attach_bp;
 };
 
 struct DebugAckPacket {
