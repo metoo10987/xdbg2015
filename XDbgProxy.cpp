@@ -475,13 +475,14 @@ long XDbgProxy::run()
 	while (!_stopFlag) {
 
 		if (_attached) {
+
 			{
 				// MutexGuard guard(this);
 
 				DebugEventPacket event;
 				DebugAckPacket ack;
 
-				while (popDbgEvent(event)) {
+				if (popDbgEvent(event)) {
 
 					MyTrace("%s(): eventId: %d, threadId: %d", __FUNCTION__, event.event.dwDebugEventCode, 
 						event.event.dwThreadId);
@@ -536,11 +537,11 @@ long XDbgProxy::run()
 					}
 
 					SetEvent(_evtQueueEvent);
-					break;
-				}
-			}
+				} else {
 
-			Sleep(100);
+					Sleep(10);
+				}
+			}			
 
 		} else {
 
