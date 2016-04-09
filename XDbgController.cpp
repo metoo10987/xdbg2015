@@ -290,7 +290,8 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 			/* GetModuleFileNameEx(_hProcess, (HMODULE)lpDebugEvent->u.CreateProcessInfo.lpBaseOfImage, 
 				fileName, MAX_PATH); */
 			DWORD len;
-			ReadProcessMemory(_hProcess, lpDebugEvent->u.CreateProcessInfo.lpImageName, fileName, sizeof(fileName) - 1, &len);
+			ReadProcessMemory(_hProcess, lpDebugEvent->u.CreateProcessInfo.lpImageName, fileName, 
+				sizeof(fileName) - 1, &len);
 			lpDebugEvent->u.CreateProcessInfo.hProcess = _hProcess;
 			lpDebugEvent->u.CreateProcessInfo.hThread = OpenThread(THREAD_ALL_ACCESS, FALSE, 
 				lpDebugEvent->dwThreadId);
@@ -949,16 +950,11 @@ bool XDbgController::getThreadContext(HANDLE hThread, CONTEXT* ctx)
 bool XDbgController::_setThreadContext(DWORD threadId, HANDLE hThread, const CONTEXT* ctx)
 {
 	if (isRemoteApi() && (api_hook_mask & ID_SetThreadContext)) {
-		DWORD tid = GetThreadIdFromHandle(hThread);
-		if (tid == 0) {
-			assert(false);
-			return false;
-		}
 
 		ApiCallPacket outPkt;
 		ApiReturnPakcet inPkt;
 		outPkt.apiId = ID_SetThreadContext;
-		outPkt.SetThreadContext.threadId = tid;
+		outPkt.SetThreadContext.threadId = threadId;
 		outPkt.SetThreadContext.ctx = *ctx;
 		sendApiCall(outPkt, inPkt);
 		return inPkt.SetThreadContext.result == TRUE;
@@ -969,16 +965,11 @@ bool XDbgController::_setThreadContext(DWORD threadId, HANDLE hThread, const CON
 bool XDbgController::_getThreadContext(DWORD threadId, HANDLE hThread, CONTEXT* ctx)
 {
 	if (isRemoteApi() && (api_hook_mask & ID_GetThreadContext)) {
-		DWORD tid = GetThreadIdFromHandle(hThread);
-		if (tid == 0) {
-			assert(false);
-			return false;
-		}
 
 		ApiCallPacket outPkt;
 		ApiReturnPakcet inPkt;
 		outPkt.apiId = ID_GetThreadContext;
-		outPkt.GetThreadContext.threadId = tid;
+		outPkt.GetThreadContext.threadId = threadId;
 		outPkt.GetThreadContext.contextFlags = ctx->ContextFlags;
 		sendApiCall(outPkt, inPkt);
 		if (!inPkt.GetThreadContext.result)

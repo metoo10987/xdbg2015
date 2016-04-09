@@ -145,9 +145,6 @@ VOID CALLBACK XDbgProxy::LdrDllNotification(ULONG NotificationReason, PCLDR_DLL_
 	} else
 		return;
 
-	// FIXME: 
-	// 加载 Dll 可能在 APC 中进行， 这会导致其它的通知过程（sendDbgEvent）被打断， 造成错误
-	// 现在 Dll 相关的通知全部缓存， 但是会导致 LoadDll 断点失效
 	pushDbgEvent(event);
 }
 
@@ -329,32 +326,6 @@ LONG CALLBACK XDbgProxy::AsyncVectoredHandler(DebugEventPacket& pkt)
 
 	return EXCEPTION_CONTINUE_SEARCH;
 }
-
-/* bool XDbgProxy::createPipe()
-{
-	std::string name = makePipeName(XDbgGetCurrentProcessId());	
-	_hPipe = ::CreateNamedPipe(name.c_str(), PIPE_ACCESS_DUPLEX, PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT, 
-		PIPE_UNLIMITED_INSTANCES, EVENT_MESSAGE_SIZE, CONTINUE_MESSAGE_SIZE, NMPWAIT_USE_DEFAULT_WAIT, NULL);
-
-	if (_hPipe == INVALID_HANDLE_VALUE)
-		return false;
-
-	std::string apiName = makeApiPipeName(XDbgGetCurrentProcessId());
-	_hApiPipe = ::CreateNamedPipe(apiName.c_str(), PIPE_ACCESS_DUPLEX, PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
-		PIPE_UNLIMITED_INSTANCES, RETURN_MESSAGE_SIZE, CALL_MESSAGE_SIZE, NMPWAIT_USE_DEFAULT_WAIT, NULL);
-
-	if (_hApiPipe == INVALID_HANDLE_VALUE) {
-		CloseHandle(_hPipe);
-		_hPipe = INVALID_HANDLE_VALUE;
-		return false;
-	}
-
-	MyTrace("%s(): _hPipe = %x[%d, %d], _hApiPipe = %x[%d, %d]", __FUNCTION__, 
-		_hPipe, EVENT_MESSAGE_SIZE, CONTINUE_MESSAGE_SIZE, 
-		_hApiPipe, RETURN_MESSAGE_SIZE, CALL_MESSAGE_SIZE);
-
-	return true;
-} */
 
 bool XDbgProxy::createEventPipe()
 {
@@ -598,6 +569,7 @@ void XDbgProxy::onDbgConnect()
 	sendProcessInfo(ack.dwThreadId);
 	sendThreadInfo();
 	sendModuleInfo(ack.dwThreadId);
+
 	// attach breakpoint
 	if (simu_attach_bp && !ack.args.createProcess) {
 		DWORD tid;
@@ -660,14 +632,6 @@ void XDbgProxy::sendModuleInfo(DWORD firstThread)
 	char modName[MAX_PATH + 1] = {0};
 
 	HMODULE hMainModule = GetModuleHandle(NULL);
-	/*msg.u.LoadDll.dwDebugInfoFileOffset = 0;
-	msg.u.LoadDll.fUnicode = 0;
-	msg.u.LoadDll.hFile = NULL;
-	msg.u.LoadDll.lpBaseOfDll = hMainModule;
-	GetModuleFileName(hMainModule, modName, MAX_PATH);
-	msg.u.LoadDll.lpImageName = modName;
-	sendDbgEvent(event, ack);
-	MyTrace("%s(): module: %s, %p", __FUNCTION__, modName, msg.u.LoadDll.lpBaseOfDll);*/
 
 	HMODULE hModules[512];
 	DWORD len;
@@ -721,35 +685,6 @@ void XDbgProxy::sendThreadInfo()
 		sendDbgEvent(event, ack, false);
 		threadId = getNextThread();
 	}
-
-	/*
-	HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-	if (hSnapshot != INVALID_HANDLE_VALUE) {
-		THREADENTRY32 te;
-		te.dwSize = sizeof(te);
-		if (Thread32First(hSnapshot, &te)) {
-			do {
-				if (te.th32OwnerProcessID == XDbgGetCurrentProcessId()) {
-
-					if (te.th32ThreadID == getId())
-						continue; // skip xdbg thread;
-					msg.dwThreadId = te.th32ThreadID;
-					msg.u.CreateThread.hThread = NULL;
-					msg.u.CreateThread.lpStartAddress = (LPTHREAD_START_ROUTINE)
-						GetThreadStartAddress(te.th32ThreadID);
-
-					msg.u.CreateThread.lpThreadLocalBase = GetThreadTeb(te.th32ThreadID);
-					addThread(te.th32ThreadID);
-					sendDbgEvent(event, ack, false);
-				}
-
-				te.dwSize = sizeof(te);
-			} while (Thread32Next(hSnapshot, &te));
-		}
-
-		XDbgCloseHandle(hSnapshot);
-	}
-	*/
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -851,7 +786,6 @@ long XDbgProxy::runApiLoop()
 
 // #define _API_TRACE
 
-#if 1
 void XDbgProxy::ReadProcessMemory(ApiCallPacket& inPkt)
 {
 	// MyTrace("%s()", __FUNCTION__);
@@ -904,67 +838,6 @@ void XDbgProxy::WriteProcessMemory(ApiCallPacket& inPkt)
 	sendApiReturn(outPkt);
 }
 
-#else 
-
-void XDbgProxy::ReadProcessMemory(ApiCallPacket& inPkt)
-{
-	// MyTrace("%s()", __FUNCTION__);
-
-	assert(inPkt.ReadProcessMemory.size <= MAX_MEMORY_BLOCK);
-
-	PVOID addr = inPkt.ReadProcessMemory.addr;
-	SIZE_T size = inPkt.ReadProcessMemory.size;
-
-	ApiReturnPakcet outPkt;
-	if (IsBadReadPtr(addr, size)) {
-		outPkt.lastError = ERROR_INVALID_ADDRESS;
-		outPkt.ReadProcessMemory.result = FALSE;
-		sendApiReturn(outPkt);
-		return;
-	}
-	
-	__try {
-		memcpy(outPkt.ReadProcessMemory.buffer, inPkt.ReadProcessMemory.addr,
-			inPkt.ReadProcessMemory.size);
-		outPkt.ReadProcessMemory.result = TRUE;
-		outPkt.ReadProcessMemory.size = inPkt.ReadProcessMemory.size;
-	}
-	__except (EXCEPTION_EXECUTE_HANDLER) {
-		outPkt.lastError = ERROR_INVALID_ADDRESS;
-		outPkt.ReadProcessMemory.result = FALSE;
-		sendApiReturn(outPkt);
-	}
-
-	sendApiReturn(outPkt);
-}
-
-void XDbgProxy::WriteProcessMemory(ApiCallPacket& inPkt)
-{
-	MyTrace("%s()", __FUNCTION__);
-	assert(inPkt.WriteProcessMemory.size <= MAX_MEMORY_BLOCK);
-	ApiReturnPakcet outPkt;
-
-	PVOID addr = inPkt.WriteProcessMemory.addr;
-	PUCHAR buffer = inPkt.WriteProcessMemory.buffer;
-	SIZE_T size = inPkt.WriteProcessMemory.size;
-
-	if (IsBadWritePtr(addr, size)) {
-		outPkt.lastError = ERROR_INVALID_ADDRESS;
-		outPkt.WriteProcessMemory.result = FALSE;
-		sendApiReturn(outPkt);
-		return;
-	}
-
-	memcpy(addr, buffer, size);
-
-	outPkt.lastError = 0;
-	outPkt.WriteProcessMemory.result = TRUE;
-	outPkt.WriteProcessMemory.writtenSize = size;
-	sendApiReturn(outPkt);
-}
-
-#endif
-
 void XDbgProxy::SuspendThread(ApiCallPacket& inPkt)
 {
 	// MyTrace("%s()", __FUNCTION__);
@@ -982,17 +855,13 @@ void XDbgProxy::SuspendThread(ApiCallPacket& inPkt)
 	}
 #endif
 	
-	// 如果被调试线程已经被suspend， 并且正在执行threadmgr中的函数， 这里就会死锁. 
-	// 所以改成OpenThread
-	// hThread = threadIdToHandle(inPkt.SuspendThread.threadId);
-	hThread = ::OpenThread(THREAD_ALL_ACCESS, FALSE, inPkt.SuspendThread.threadId);
+	hThread = threadIdToHandle(inPkt.SuspendThread.threadId);
 
 	if (hThread == NULL) {
 		outPkt.SuspendThread.result = -1;
-		// SetLastError(ERROR_INVALID_PARAMETER);
+		SetLastError(ERROR_INVALID_PARAMETER);
 	} else {
 		outPkt.SuspendThread.result = ::SuspendThread(hThread);
-		CloseHandle(hThread);
 	}
 
 	outPkt.lastError = GetLastError();
@@ -1012,17 +881,13 @@ void XDbgProxy::ResumeThread(ApiCallPacket& inPkt)
 	ApiReturnPakcet outPkt;
 	HANDLE hThread;
 
-	// 如果被调试线程已经被suspend， 并且正在执行threadmgr中的函数， 这里就会死锁. 
-	// 所以改成OpenThread
-	// hThread = threadIdToHandle(inPkt.SuspendThread.threadId);
-	hThread = ::OpenThread(THREAD_ALL_ACCESS, FALSE, inPkt.SuspendThread.threadId);
+	hThread = threadIdToHandle(inPkt.SuspendThread.threadId);
 
 	if (hThread == NULL) {
 		outPkt.ResumeThread.result = -1;
-		// SetLastError(ERROR_INVALID_PARAMETER);
+		SetLastError(ERROR_INVALID_PARAMETER);
 	} else {
 		outPkt.ResumeThread.result = ::ResumeThread(hThread);
-		CloseHandle(hThread);
 	}
 
 	outPkt.lastError = GetLastError();
@@ -1060,10 +925,7 @@ void XDbgProxy::GetThreadContext(ApiCallPacket& inPkt)
 	ApiReturnPakcet outPkt;
 	HANDLE hThread;
 
-	// 如果被调试线程已经被suspend， 并且正在执行threadmgr中的函数， 这里就会死锁. 
-	// 所以改成OpenThread
 	hThread = threadIdToHandle(inPkt.SuspendThread.threadId);
-	// hThread = ::OpenThread(THREAD_ALL_ACCESS, FALSE, inPkt.SuspendThread.threadId);
 
 	if (hThread == NULL || hThread == (HANDLE )-1) {
 		outPkt.GetThreadContext.result = FALSE;
@@ -1072,7 +934,6 @@ void XDbgProxy::GetThreadContext(ApiCallPacket& inPkt)
 	} else {
 		outPkt.GetThreadContext.ctx.ContextFlags = inPkt.GetThreadContext.contextFlags;
 		outPkt.GetThreadContext.result = ::GetThreadContext(hThread, &outPkt.GetThreadContext.ctx);
-		// CloseHandle(hThread);
 	}
 
 	outPkt.lastError = GetLastError();
@@ -1102,10 +963,7 @@ void XDbgProxy::SetThreadContext(ApiCallPacket& inPkt)
 	}
 #endif
 
-	// 如果被调试线程已经被suspend， 并且正在执行threadmgr中的函数， 这里就会死锁. 
-	// 所以改成OpenThread
 	hThread = threadIdToHandle(inPkt.SuspendThread.threadId);
-	// hThread = ::OpenThread(THREAD_ALL_ACCESS, FALSE, inPkt.SuspendThread.threadId);
 
 	if (hThread == NULL || hThread == (HANDLE)-1) {
 		outPkt.SetThreadContext.result = FALSE;
@@ -1114,7 +972,6 @@ void XDbgProxy::SetThreadContext(ApiCallPacket& inPkt)
 	}
 	else {
 		outPkt.SetThreadContext.result = ::SetThreadContext(hThread, &inPkt.SetThreadContext.ctx);
-		// CloseHandle(hThread);
 	}
 
 	outPkt.lastError = GetLastError();
