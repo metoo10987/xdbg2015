@@ -125,6 +125,9 @@ VOID CALLBACK XDbgProxy::_LdrDllNotification(ULONG NotificationReason, PCLDR_DLL
 VOID CALLBACK XDbgProxy::LdrDllNotification(ULONG NotificationReason, PCLDR_DLL_NOTIFICATION_DATA NotificationData, 
 	PVOID Context)
 {
+	if (!_attached)
+		return;
+
 	DebugEventPacket event;
 	memset(&event, 0, sizeof(event));
 	DEBUG_EVENT& msg = event.event;
