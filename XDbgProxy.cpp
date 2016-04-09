@@ -445,7 +445,8 @@ void XDbgProxy::waitForAttach()
 long XDbgProxy::run()
 {
 	MyTrace("XDBG Thread started");
-
+	
+	DWORD sleepTime = 0;
 	while (!_stopFlag) {
 
 		if (_attached) {
@@ -511,11 +512,21 @@ long XDbgProxy::run()
 					}
 
 					SetEvent(_evtQueueEvent);
+					sleepTime = 0;
 				} else {
 
-					Sleep(10);
+					Sleep(sleepTime);
+					sleepTime ++;
+					if (sleepTime > 15) {
+						sleepTime = 15;
+						if (!PeekNamedPipe(_hPipe, NULL, 0, NULL, 0, NULL)) {
+							_attached = false;
+							CloseHandle(_hPipe);
+							_hPipe = INVALID_HANDLE_VALUE;
+						}
+					}
 				}
-			}			
+			}
 
 		} else {
 
