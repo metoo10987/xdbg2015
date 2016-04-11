@@ -523,6 +523,18 @@ DWORD(__stdcall * Real_SuspendThread)(HANDLE a0)
 DWORD(__stdcall * Real_ResumeThread)(HANDLE a0)
 = ResumeThread;
 
+BOOL (WINAPI* Real_DebugBreakProcess)(HANDLE hProcess)
+= DebugBreakProcess;
+
+HANDLE(__stdcall * Real_CreateRemoteThread)(HANDLE a0,
+	LPSECURITY_ATTRIBUTES a1,
+	ULONG_PTR a2,
+	LPTHREAD_START_ROUTINE a3,
+	LPVOID a4,
+	DWORD a5,
+	LPDWORD a6)
+	= CreateRemoteThread;
+
 //////////////////////////////////////////////////////////////////////////
 BOOL __stdcall Mine_CreateProcessA(LPCSTR a0,
 	LPSTR a1,
@@ -762,6 +774,15 @@ DWORD WINAPI Mine_GetModuleFileNameExW(HANDLE hProcess,
 	LPWSTR lpFilename,
 	DWORD nSize);
 
+BOOL WINAPI Mine_DebugBreakProcess(HANDLE hProcess);
+HANDLE __stdcall Mine_CreateRemoteThread(HANDLE a0,
+	LPSECURITY_ATTRIBUTES a1,
+	ULONG_PTR a2,
+	LPTHREAD_START_ROUTINE a3,
+	LPVOID a4,
+	DWORD a5,
+	LPDWORD a6);
+
 BOOL __stdcall Mine_WaitForDebugEvent(LPDEBUG_EVENT a0,
 	DWORD a1)
 {
@@ -858,7 +879,9 @@ bool XDbgController::hookDbgApi()
 	DetourAttach(&(PVOID&)Real_WaitForDebugEvent, &(PVOID&)Mine_WaitForDebugEvent);
 	DetourAttach(&(PVOID&)Real_ContinueDebugEvent, &(PVOID&)Mine_ContinueDebugEvent);
 	DetourAttach(&(PVOID&)Real_GetThreadContext, &(PVOID&)Mine_GetThreadContext);
-	DetourAttach(&(PVOID&)Real_SetThreadContext, &(PVOID&)Mine_SetThreadContext);	
+	DetourAttach(&(PVOID&)Real_SetThreadContext, &(PVOID&)Mine_SetThreadContext);
+	DetourAttach(&(PVOID&)Real_DebugBreakProcess, &(PVOID&)Mine_DebugBreakProcess);
+
 	//////////////////////////////////////////////////////////////////////////
 	// optional hooking api
 	if (api_hook_mask & ID_ReadProcessMemory) {
@@ -887,6 +910,10 @@ bool XDbgController::hookDbgApi()
 
 	if (api_hook_mask & ID_GetModuleFileNameExW) {
 		DetourAttach(&(PVOID&)Real_GetModuleFileNameExW, &(PVOID&)Mine_GetModuleFileNameExW);
+	}
+
+	if (api_hook_mask & ID_CreateRemoteThread) {
+		DetourAttach(&(PVOID&)Real_CreateRemoteThread, &(PVOID&)Mine_CreateRemoteThread);
 	}
 
 	return DetourTransactionCommit() == NO_ERROR;
@@ -1245,4 +1272,52 @@ DWORD __stdcall Mine_SuspendThread(HANDLE a0)
 DWORD __stdcall Mine_ResumeThread(HANDLE a0)
 {
 	return XDbgController::instance().resumeThread(a0);
+}
+
+bool XDbgController::debugBreak()
+{
+	DWORD tid;
+	HANDLE hThread = ::CreateRemoteThread(_hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)DebugBreak, NULL, 0, &tid);
+	if (hThread)
+		CloseHandle(hThread);
+	return hThread != NULL;
+}
+
+BOOL WINAPI Mine_DebugBreakProcess(HANDLE hProcess)
+{
+	if (XDbgController::instance().getProcessId() == GetProcessIdFromHandle(hProcess))
+		return XDbgController::instance().debugBreak() ? TRUE : FALSE;
+	return ::Real_DebugBreakProcess(hProcess);
+}
+
+HANDLE XDbgController::createRemoteThread(LPSECURITY_ATTRIBUTES  lpThreadAttributes, SIZE_T dwStackSize,
+	LPTHREAD_START_ROUTINE lpStartAddress, LPVOID lpParameter, DWORD dwCreationFlags,
+	LPDWORD lpThreadId)
+{
+	ApiCallPacket outPkt;
+	ApiReturnPakcet inPkt;
+	outPkt.apiId = ID_CreateRemoteThread;
+	outPkt.CreateRemoteThread.lpThreadAttributes = lpThreadAttributes;
+	outPkt.CreateRemoteThread.dwStackSize = dwStackSize;
+	outPkt.CreateRemoteThread.lpStartAddress = lpStartAddress;
+	outPkt.CreateRemoteThread.lpParameter = lpParameter;
+	outPkt.CreateRemoteThread.dwCreationFlags = dwCreationFlags;
+	sendApiCall(outPkt, inPkt);
+	if (inPkt.ResumeThread.result && lpThreadId)
+		*lpThreadId = inPkt.CreateRemoteThread.threadId;
+	return inPkt.CreateRemoteThread.result;
+}
+
+HANDLE __stdcall Mine_CreateRemoteThread(HANDLE a0,
+	LPSECURITY_ATTRIBUTES a1,
+	ULONG_PTR a2,
+	LPTHREAD_START_ROUTINE a3,
+	LPVOID a4,
+	DWORD a5,
+	LPDWORD a6)
+{
+	if (XDbgController::instance().getProcessId() == GetProcessIdFromHandle(a0))
+		return XDbgController::instance().createRemoteThread(a1, a2, a3, a4, a5, a6);
+
+	return Real_CreateRemoteThread(a0, a1, a2, a3, a4, a5, a6);
 }

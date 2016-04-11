@@ -102,6 +102,7 @@ protected:
 	void SetThreadContext(ApiCallPacket& inPkt);
 	void VirtualProtectEx(ApiCallPacket& inPkt);
 	void _GetModuleFileNameExW(ApiCallPacket& inPkt);
+	void CreateRemoteThread(ApiCallPacket& inPkt);
 
 	//////////////////////////////////////////////////////////////////////////
 

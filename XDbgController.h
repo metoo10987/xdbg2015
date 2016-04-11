@@ -39,6 +39,10 @@ public:
 	DWORD suspendThread(HANDLE hThread);
 	DWORD resumeThread(HANDLE hThread);
 	DWORD getModuleFileName(HMODULE hMod, wchar_t* fileName, DWORD len);
+	bool debugBreak();
+	HANDLE createRemoteThread(LPSECURITY_ATTRIBUTES  lpThreadAttributes, SIZE_T dwStackSize, 
+		LPTHREAD_START_ROUTINE lpStartAddress, LPVOID lpParameter, DWORD dwCreationFlags, 
+		LPDWORD lpThreadId);
 
 	DWORD getEventCode() const
 	{

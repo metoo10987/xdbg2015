@@ -74,6 +74,7 @@ struct DebugAckPacket {
 #define ID_VirtualFreeEx				(0x00000200)
 #define ID_GetModuleFileNameExW			(0x00000400)
 #define ID_NtQueryInformationProcess	(0x00000800)
+#define ID_CreateRemoteThread			(0x00001000)
 
 #define CALL_MESSAGE_SIZE		sizeof(ApiCallPacket)
 #define RETURN_MESSAGE_SIZE		sizeof(ApiReturnPakcet)
@@ -138,6 +139,14 @@ struct ApiCallPacket {
 		struct {
 			HMODULE		hMod;
 		} _GetModuleFileNameExW;
+
+		struct {
+			LPSECURITY_ATTRIBUTES	lpThreadAttributes;
+			SIZE_T					dwStackSize;
+			LPTHREAD_START_ROUTINE	lpStartAddress;
+			LPVOID					lpParameter;
+			DWORD					dwCreationFlags;
+		} CreateRemoteThread;
 	};
 };
 
@@ -195,6 +204,11 @@ struct ApiReturnPakcet {
 			wchar_t		fileName[MAX_PATH];
 			DWORD		result;
 		} _GetModuleFileNameExW;
+
+		struct {
+			HANDLE		result;
+			DWORD		threadId;
+		} CreateRemoteThread;
 	};
 };
 

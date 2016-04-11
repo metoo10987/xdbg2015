@@ -70,13 +70,13 @@ BOOL XDbgProxy::sendDbgEvent(const DebugEventPacket& event, struct DebugAckPacke
 {
 	BOOL result;
 	if (freeze)
-		suspendAll(XDbgGetCurrentThreadId());
+		suspendAll(event.event.dwThreadId);
 	if (sendDbgEvent(event))
 		result = recvDbgAck(ack);
 	else
 		result = FALSE;
 	if (freeze)
-		resumeAll(XDbgGetCurrentThreadId());
+		resumeAll(event.event.dwThreadId);
 	return result;
 }
 
@@ -370,10 +370,10 @@ BOOL XDbgProxy::DllMain(HMODULE hModule, DWORD reason, LPVOID lpReserved)
 	switch (reason) {
 	case DLL_PROCESS_ATTACH:
 		{
-			char dllPath[MAX_PATH + 1];
+			/* char dllPath[MAX_PATH + 1];
 			GetModuleFileName(hModule, dllPath, sizeof(dllPath) - 1);
 			dllPath[sizeof(dllPath) - 1] = 0;
-			LoadLibrary(dllPath);
+			LoadLibrary(dllPath); */
 		}
 		// MyTrace("%s(): process(%u) xdbg proxy loaded. thread id: %u", __FUNCTION__, 
 		//		GetCurrentProcessId(), GetCurrentThreadId());
@@ -712,7 +712,8 @@ void XDbgProxy::registerRemoteApi()
 	_apiHandlers[ID_VirtualProtectEx] = &XDbgProxy::VirtualProtectEx;
 	_apiHandlers[ID_GetThreadContext] = &XDbgProxy::GetThreadContext;
 	_apiHandlers[ID_SetThreadContext] = &XDbgProxy::SetThreadContext;
-	_apiHandlers[ID_GetModuleFileNameExW] = &XDbgProxy::_GetModuleFileNameExW;	
+	_apiHandlers[ID_GetModuleFileNameExW] = &XDbgProxy::_GetModuleFileNameExW;
+	_apiHandlers[ID_CreateRemoteThread] = &XDbgProxy::CreateRemoteThread;
 }
 
 BOOL XDbgProxy::recvApiCall(ApiCallPacket& inPkt)
@@ -895,11 +896,29 @@ void XDbgProxy::ResumeThread(ApiCallPacket& inPkt)
 	ApiReturnPakcet outPkt;
 	HANDLE hThread;
 
+#ifdef _DEBUG
+	if (inPkt.SuspendThread.threadId == getId() || inPkt.SuspendThread.threadId == _apiThread.getId()) {
+		// log error
+		assert(false);
+		outPkt.SuspendThread.result = -1;
+		SetLastError(ERROR_INVALID_PARAMETER);
+		sendApiReturn(outPkt);
+	}
+#endif
+
 	hThread = threadIdToHandle(inPkt.SuspendThread.threadId);
 
 	if (hThread == NULL) {
-		outPkt.ResumeThread.result = -1;
-		SetLastError(ERROR_INVALID_PARAMETER);
+
+		// when the thread create by suspend flag, it's not in the thread list
+		hThread = OpenThread(THREAD_ALL_ACCESS, FALSE, inPkt.SuspendThread.threadId);
+		if (hThread == NULL) {
+			outPkt.ResumeThread.result = -1;
+			SetLastError(ERROR_INVALID_PARAMETER);
+		} else 	{
+			outPkt.ResumeThread.result = ::ResumeThread(hThread);
+			CloseHandle(hThread);
+		}
 	} else {
 		outPkt.ResumeThread.result = ::ResumeThread(hThread);
 	}
@@ -1028,5 +1047,50 @@ void XDbgProxy::_GetModuleFileNameExW(ApiCallPacket& inPkt)
 		outPkt._GetModuleFileNameExW.result, outPkt.lastError);
 #endif
 
+	sendApiReturn(outPkt);
+}
+
+void XDbgProxy::CreateRemoteThread(ApiCallPacket& inPkt)
+{
+	ApiReturnPakcet outPkt;
+	ULONG pid;
+	if (!GetNamedPipeClientProcessId(_hApiPipe, &pid)) {
+		assert(false);
+		outPkt.CreateRemoteThread.result = NULL;
+		outPkt.lastError = ERROR_INVALID_PARAMETER;
+		sendApiReturn(outPkt);
+		return;
+	}
+
+	HANDLE hProc = ::OpenProcess(PROCESS_DUP_HANDLE, FALSE, pid);
+	if (hProc == NULL) {
+		assert(false);
+		outPkt.CreateRemoteThread.result = NULL;
+		outPkt.lastError = ERROR_INVALID_PARAMETER;
+		sendApiReturn(outPkt);
+		return;
+	}
+
+	HANDLE hThread = ::CreateThread(inPkt.CreateRemoteThread.lpThreadAttributes,
+		inPkt.CreateRemoteThread.dwStackSize, inPkt.CreateRemoteThread.lpStartAddress,
+		inPkt.CreateRemoteThread.lpParameter, inPkt.CreateRemoteThread.dwCreationFlags,
+		&outPkt.CreateRemoteThread.threadId);
+
+	if (hThread == NULL) {
+		outPkt.lastError = GetLastError();
+		outPkt.CreateRemoteThread.result = NULL;
+	} else {
+		if (!DuplicateHandle(GetCurrentProcess(), hThread, hProc, &outPkt.CreateRemoteThread.result,
+			0, FALSE, DUPLICATE_SAME_ACCESS)) {
+
+			assert(false);
+			outPkt.CreateRemoteThread.result = NULL;
+			outPkt.lastError = ERROR_INVALID_PARAMETER;
+		}
+
+		CloseHandle(hThread);
+	}
+
+	CloseHandle(hProc);
 	sendApiReturn(outPkt);
 }
