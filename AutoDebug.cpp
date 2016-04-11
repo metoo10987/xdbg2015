@@ -36,22 +36,22 @@ bool IgnoreException::peekDebugEvent(LPDEBUG_EVENT event, DWORD* continueStatus)
 				return false;
 			}
 
-			if (event->u.Exception.ExceptionRecord.ExceptionCode >= it->first &&
-				event->u.Exception.ExceptionRecord.ExceptionCode <= it->second) {
-				*continueStatus = DBG_EXCEPTION_NOT_HANDLED;
-				return false;
-			}
-
 			if (it->second == 0) {
 				DWORD code = 0;
 				SIZE_T len;
-				::ReadProcessMemory(XDbgController::instance().getProcessHandle(), 
+				::ReadProcessMemory(XDbgController::instance().getProcessHandle(),
 					event->u.Exception.ExceptionRecord.ExceptionAddress, &code,
 					sizeof(code), &len);
 				if (code == it->first) {
 					*continueStatus = DBG_EXCEPTION_NOT_HANDLED;
 					return false;
 				}
+			}
+
+			if (event->u.Exception.ExceptionRecord.ExceptionCode >= it->first &&
+				event->u.Exception.ExceptionRecord.ExceptionCode <= it->second) {
+				*continueStatus = DBG_EXCEPTION_NOT_HANDLED;
+				return false;
 			}
 		}
 	}

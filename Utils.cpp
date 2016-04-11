@@ -1,6 +1,6 @@
+#include <stdio.h>
 #include <Windows.h>
 #include "Utils.h"
-#include "common.h"
 
 #include "Win32ApiWrapper.h"
 #include <tlhelp32.h>

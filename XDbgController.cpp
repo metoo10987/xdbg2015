@@ -517,6 +517,20 @@ DWORD(WINAPI * Real_GetModuleFileNameExW)(HANDLE hProcess,
 	= (NTSTATUS(NTAPI * )(HANDLE, ULONG_PTR, PVOID, ULONG, PULONG))
 	GetProcAddress(GetModuleHandle("ntdll.dll"), "NtQueryInformationProcess"); */
 
+/* BOOL(__stdcall * Real_DuplicateHandle)(HANDLE a0,
+	HANDLE a1,
+	HANDLE a2,
+	LPHANDLE a3,
+	DWORD a4,
+	BOOL a5,
+	DWORD a6)
+	= DuplicateHandle; */
+
+/* HANDLE(__stdcall * Real_OpenProcess)(DWORD a0,
+	BOOL a1,
+	DWORD a2)
+	= OpenProcess; */
+
 DWORD(__stdcall * Real_SuspendThread)(HANDLE a0)
 = SuspendThread;
 
@@ -1230,6 +1244,26 @@ DWORD nSize)
 	return 0;
 }
 */
+
+/* BOOL __stdcall Mine_DuplicateHandle(HANDLE a0,
+	HANDLE a1,
+	HANDLE a2,
+	LPHANDLE a3,
+	DWORD a4,
+	BOOL a5,
+	DWORD a6)
+{
+	// 实现方式参考 CreateRemoteThread
+	return Real_DuplicateHandle(a0, a1, a2, a3, a4, a5, a6);
+} */
+
+/* HANDLE __stdcall Mine_OpenProcess(DWORD a0,
+	BOOL a1,
+	DWORD a2)
+{
+	// 实现方式参考 CreateRemoteThread
+	return Real_OpenProcess(a0, a1, a2);
+} */
 
 DWORD XDbgController::suspendThread(HANDLE hThread)
 {

@@ -900,7 +900,7 @@ void XDbgProxy::ResumeThread(ApiCallPacket& inPkt)
 	if (inPkt.SuspendThread.threadId == getId() || inPkt.SuspendThread.threadId == _apiThread.getId()) {
 		// log error
 		assert(false);
-		outPkt.SuspendThread.result = -1;
+		outPkt.ResumeThread.result = -1;
 		SetLastError(ERROR_INVALID_PARAMETER);
 		sendApiReturn(outPkt);
 	}
@@ -990,7 +990,7 @@ void XDbgProxy::SetThreadContext(ApiCallPacket& inPkt)
 	if (inPkt.SuspendThread.threadId == getId() || inPkt.SuspendThread.threadId == _apiThread.getId()) {
 		// log error
 		assert(false);
-		outPkt.SuspendThread.result = -1;
+		outPkt.SetThreadContext.result = -1;
 		SetLastError(ERROR_INVALID_PARAMETER);
 		sendApiReturn(outPkt);
 	}

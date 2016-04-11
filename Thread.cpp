@@ -53,11 +53,11 @@ static DWORD exceptionFilter(EXCEPTION_POINTERS* excepInfo)
 DWORD __stdcall Thread::threadProc(void* param)
 {
 
-#define PAGE_SIZE		4096
+// #define PAGE_SIZE		4096
 
-	BYTE guardPages[PAGE_SIZE * 2 + 1];
-	DWORD oldProt;
-	VirtualProtect(&guardPages[PAGE_SIZE + 1], 1, PAGE_READONLY, &oldProt);
+	// BYTE guardPages[PAGE_SIZE * 2 + 1];
+	// DWORD oldProt;
+	// VirtualProtect(&guardPages[PAGE_SIZE + 1], 1, PAGE_READONLY, &oldProt);
 	
 	Thread* thisPtr = (Thread* )param;
 	DWORD result;
