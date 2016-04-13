@@ -339,9 +339,9 @@ BOOL ModifyExe()
 void initMode2()
 {
 	ModifyExe();
-	inject_method = 1; // WIN HOOK
-	api_hook_mask = ID_ReadProcessMemory | ID_WriteProcessMemory | ID_SuspendThread | ID_ResumeThread | 
-		ID_GetThreadContext | ID_SetThreadContext | ID_VirtualQueryEx | ID_VirtualProtectEx | ID_GetModuleFileNameExW;
+	// inject_method = 1; // WIN HOOK
+	//api_hook_mask = ID_ReadProcessMemory | ID_WriteProcessMemory | ID_SuspendThread | ID_ResumeThread | 
+	//	ID_GetThreadContext | ID_SetThreadContext | ID_VirtualQueryEx | ID_VirtualProtectEx | ID_GetModuleFileNameExW;
 	MyTrace("xdbgcore initializing. mode: 2");
 	if (!XDbgController::instance().initialize(hInstance, true)) {
 		// log error
@@ -351,8 +351,6 @@ void initMode2()
 	ResiserListViewClass();
 	DetourTransactionBegin();
 	DetourAttach(&(PVOID&)Real_CreateWindowExW, &(PVOID&)Mine_CreateWindowExW);
-	// DetourAttach(&(PVOID&)Real_FindResourceExA, &(PVOID&)Mine_FindResourceExA);
-	// DetourAttach(&(PVOID&)Real_FindResourceExW, &(PVOID&)Mine_FindResourceExW);
 	DetourTransactionCommit();
 }
 
