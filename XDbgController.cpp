@@ -292,7 +292,9 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 			DWORD len;
 			ReadProcessMemory(_hProcess, lpDebugEvent->u.CreateProcessInfo.lpImageName, fileName, 
 				sizeof(fileName) - 1, &len);
-			lpDebugEvent->u.CreateProcessInfo.hProcess = _hProcess;
+			DuplicateHandle(GetCurrentProcess(), _hProcess, GetCurrentProcess(), 
+				&lpDebugEvent->u.CreateProcessInfo.hProcess, 0, FALSE, DUPLICATE_SAME_ACCESS);
+
 			lpDebugEvent->u.CreateProcessInfo.hThread = OpenThread(THREAD_ALL_ACCESS, FALSE, 
 				lpDebugEvent->dwThreadId);
 			MyTrace("%s(): threadId: %d, threadHandle: %x", __FUNCTION__, lpDebugEvent->dwThreadId, 

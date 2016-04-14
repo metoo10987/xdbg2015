@@ -9,7 +9,7 @@
 #include "ThreadMgr.h"
 #include "Utils.h"
 
-class XDbgProxy : protected Thread, public ThreadMgr, protected Mutex
+class XDbgProxy : protected Thread, public ThreadMgr /*, protected Mutex */
 {
 private:
 	XDbgProxy(void);

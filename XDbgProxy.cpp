@@ -261,7 +261,7 @@ LONG CALLBACK XDbgProxy::VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo)
 LONG CALLBACK XDbgProxy::AsyncVectoredHandler(DebugEventPacket& pkt)
 {
 	// MyTrace("%s()", __FUNCTION__);
-	MutexGuard guard(this);
+	// MutexGuard guard(this);
 	
 	if (threadIdToHandle(pkt.event.dwThreadId) == NULL) {
 		// assert(false);
@@ -563,7 +563,7 @@ long XDbgProxy::run()
 
 void XDbgProxy::onDbgConnect()
 {
-	MutexGuard guard(this);
+	// MutexGuard guard(this);
 
 	clearThreads();
 	addAllThreads(XDbgGetCurrentThreadId());
