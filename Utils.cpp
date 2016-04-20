@@ -350,7 +350,7 @@ DWORD WINAPI GetThreadIdFromHandle(HANDLE hThread, LPDWORD processId)
 		return 0;
 
 	if (processId)
-		*processId = bi.ClientId.UniqueProcess;
+		*processId = (DWORD )bi.ClientId.UniqueProcess;
 
 	return (DWORD )bi.ClientId.UniqueThread;
 }

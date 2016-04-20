@@ -29,9 +29,9 @@ IgnoreException::IgnoreException()
 bool IgnoreException::peekDebugEvent(LPDEBUG_EVENT event, DWORD* continueStatus)
 {
 	if (event->dwDebugEventCode == EXCEPTION_DEBUG_EVENT) {
-		std::vector<std::pair<ULONG, ULONG> >::iterator it;
+		std::vector<std::pair<ULONG_PTR, ULONG_PTR> >::iterator it;
 		for (it = _exceptions.begin(); it != _exceptions.end(); it ++) {
-			if (it->first == 0 && (ULONG )event->u.Exception.ExceptionRecord.ExceptionAddress == it->second) {
+			if (it->first == 0 && (ULONG_PTR )event->u.Exception.ExceptionRecord.ExceptionAddress == it->second) {
 				*continueStatus = DBG_EXCEPTION_NOT_HANDLED;
 				return false;
 			}

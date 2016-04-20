@@ -1,6 +1,7 @@
 #pragma once
 
 // #include <algorithm>
+#include <assert.h>
 
 #ifdef _DEBUG
 void _MyTrace(LPCSTR fmt, ...);

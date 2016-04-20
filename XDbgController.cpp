@@ -289,7 +289,7 @@ bool XDbgController::waitEvent(LPDEBUG_EVENT lpDebugEvent, DWORD dwMilliseconds)
 			char fileName[MAX_PATH + 1];
 			/* GetModuleFileNameEx(_hProcess, (HMODULE)lpDebugEvent->u.CreateProcessInfo.lpBaseOfImage, 
 				fileName, MAX_PATH); */
-			DWORD len;
+			SIZE_T len;
 			ReadProcessMemory(_hProcess, lpDebugEvent->u.CreateProcessInfo.lpImageName, fileName, 
 				sizeof(fileName) - 1, &len);
 			DuplicateHandle(GetCurrentProcess(), _hProcess, GetCurrentProcess(), 
