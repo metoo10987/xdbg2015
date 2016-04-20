@@ -3,16 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2013
 VisualStudioVersion = 12.0.40629.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "xdbg", "xdbg.vcxproj", "{EA45863F-ECB5-449A-BE0E-B51187B98695}"
-EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "debugee", "debugee.vcxproj", "{201B4863-DC85-4848-B019-8039ECC0863F}"
-	ProjectSection(ProjectDependencies) = postProject
-		{EA45863F-ECB5-449A-BE0E-B51187B98695} = {EA45863F-ECB5-449A-BE0E-B51187B98695}
-	EndProjectSection
-EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "xdbgcore", "xdbgcore.vcxproj", "{05AF2FAB-FDFC-429D-942B-1D633BF29E40}"
-EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "launcher", "launcher.vcxproj", "{1B84D79B-83FF-479E-B3CE-A113613A0FD6}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -20,22 +11,10 @@ Global
 		Release|Win32 = Release|Win32
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{EA45863F-ECB5-449A-BE0E-B51187B98695}.Debug|Win32.ActiveCfg = Debug|Win32
-		{EA45863F-ECB5-449A-BE0E-B51187B98695}.Debug|Win32.Build.0 = Debug|Win32
-		{EA45863F-ECB5-449A-BE0E-B51187B98695}.Release|Win32.ActiveCfg = Release|Win32
-		{EA45863F-ECB5-449A-BE0E-B51187B98695}.Release|Win32.Build.0 = Release|Win32
-		{201B4863-DC85-4848-B019-8039ECC0863F}.Debug|Win32.ActiveCfg = Debug|Win32
-		{201B4863-DC85-4848-B019-8039ECC0863F}.Debug|Win32.Build.0 = Debug|Win32
-		{201B4863-DC85-4848-B019-8039ECC0863F}.Release|Win32.ActiveCfg = Release|Win32
-		{201B4863-DC85-4848-B019-8039ECC0863F}.Release|Win32.Build.0 = Release|Win32
 		{05AF2FAB-FDFC-429D-942B-1D633BF29E40}.Debug|Win32.ActiveCfg = Debug|Win32
 		{05AF2FAB-FDFC-429D-942B-1D633BF29E40}.Debug|Win32.Build.0 = Debug|Win32
 		{05AF2FAB-FDFC-429D-942B-1D633BF29E40}.Release|Win32.ActiveCfg = Release|Win32
 		{05AF2FAB-FDFC-429D-942B-1D633BF29E40}.Release|Win32.Build.0 = Release|Win32
-		{1B84D79B-83FF-479E-B3CE-A113613A0FD6}.Debug|Win32.ActiveCfg = Debug|Win32
-		{1B84D79B-83FF-479E-B3CE-A113613A0FD6}.Debug|Win32.Build.0 = Debug|Win32
-		{1B84D79B-83FF-479E-B3CE-A113613A0FD6}.Release|Win32.ActiveCfg = Release|Win32
-		{1B84D79B-83FF-479E-B3CE-A113613A0FD6}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

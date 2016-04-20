@@ -142,7 +142,7 @@ VOID CALLBACK XDbgProxy::LdrDllNotification(ULONG NotificationReason, PCLDR_DLL_
 		msg.u.LoadDll.lpBaseOfDll = NotificationData->Loaded.DllBase;
 		msg.u.LoadDll.lpImageName = _wcsdup(NotificationData->Loaded.FullDllName->Buffer);
 		msg.u.LoadDll.nDebugInfoSize = 0;
-	} else if (NotificationReason == LDR_DLL_NOTIFICATION_REASON_LOADED) {
+	} else if (NotificationReason == LDR_DLL_NOTIFICATION_REASON_UNLOADED) {
 		msg.dwDebugEventCode = UNLOAD_DLL_DEBUG_EVENT;
 		msg.u.UnloadDll.lpBaseOfDll = NotificationData->Unloaded.DllBase;
 	} else
