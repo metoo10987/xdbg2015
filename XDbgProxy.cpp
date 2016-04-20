@@ -479,6 +479,13 @@ long XDbgProxy::run()
 						}
 
 						break;
+					case UNLOAD_DLL_DEBUG_EVENT:
+						if (!sendDbgEvent(event, ack)) {
+							break;
+						}
+
+						break;
+
 					case CREATE_THREAD_DEBUG_EVENT:
 
 						if (threadIdToHandle(event.event.dwThreadId) != NULL) {
